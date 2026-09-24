@@ -12,6 +12,16 @@ export const formatDate = (isoDate: string): string => {
   return `${day}-${month}-${year}`;
 };
 
+// Format time as HH:MM AM/PM
+export const formatTime = (isoDate: string): string => {
+  const d = new Date(isoDate);
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  return `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
+};
+
 // Format datetime as DD MMM YYYY • HH:MM AM/PM
 export const formatDateTime = (isoDate: string): string => {
   const d = new Date(isoDate);
