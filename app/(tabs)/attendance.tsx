@@ -16,6 +16,7 @@ import { Fonts, Radius } from '../../constants/theme';
 import { AttendanceRepository, Attendance } from '../../db/repositories/AttendanceRepository';
 import { MemberRepository, Member } from '../../db/repositories/MemberRepository';
 import { BiometricService } from '../../services/BiometricService';
+import { AppModal } from '../../components/ui/AppModal';
 import {
   ChevronLeftIcon,
   FingerprintIcon,
@@ -70,10 +71,16 @@ export default function AttendanceScreen() {
 
   const handleCheckInMember = (member: Member) => {
     try {
+      if (AttendanceRepository.hasCheckedInToday(member.id)) {
+        Alert.alert('Already Checked In', `${member.full_name} has already checked in today.`);
+        setMemberPickerVisible(false);
+        return;
+      }
+
       AttendanceRepository.markAttendance(member.id, 'biometric');
       setMemberPickerVisible(false);
       loadData();
-      Alert.alert('Attendance Marked', `${member.full_name} checked in successfully!`);
+      Alert.alert('Attendance Marked ✓', `${member.full_name} checked in successfully!`);
     } catch (e: any) {
       Alert.alert('Notice', e?.message ?? 'Could not record attendance');
     }
@@ -83,15 +90,15 @@ export default function AttendanceScreen() {
   const todayAttendancesMap = new Map<string, Attendance>();
   todayAttendances.forEach(a => todayAttendancesMap.set(a.member_id, a));
 
-  const totalMembersCount = members.length > 0 ? members.length : 128;
-  const presentCount = todayAttendances.length > 0 ? todayAttendances.length : 96;
-  const attendanceRate = Math.min(100, Math.round((presentCount / totalMembersCount) * 100));
+  const totalMembersCount = members.length;
+  const presentCount = todayAttendances.length;
+  const attendanceRate = totalMembersCount > 0 ? Math.min(100, Math.round((presentCount / totalMembersCount) * 100)) : 0;
 
   // Build items list
   const memberItems = members.map(m => {
     const att = todayAttendancesMap.get(m.id);
     const isPresent = Boolean(att);
-    let checkInTime = '08:12 AM';
+    let checkInTime = 'Not checked in';
     if (att) {
       const d = new Date(att.check_in_at);
       let h = d.getHours();
@@ -105,7 +112,7 @@ export default function AttendanceScreen() {
       name: m.full_name,
       number: m.member_number,
       age: m.age ?? 22,
-      time: isPresent ? checkInTime : 'Not checked in',
+      time: checkInTime,
       status: isPresent ? 'present' : 'absent',
       member: m,
     };
@@ -241,41 +248,46 @@ export default function AttendanceScreen() {
         </View>
       </ScrollView>
 
-      {/* Member Picker Modal */}
-      <Modal visible={memberPickerVisible} transparent animationType="slide">
-        <View style={styles.modalBg}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Select Member to Check In</Text>
-            <FlatList
-              data={members}
-              keyExtractor={m => m.id}
-              style={{ maxHeight: 360 }}
-              renderItem={({ item }) => {
-                const avatarUrl = getMemberAvatar(item.full_name, item.photo_uri);
-                return (
-                  <TouchableOpacity
-                    style={styles.modalItem}
-                    onPress={() => handleCheckInMember(item)}
-                  >
-                    <Image source={{ uri: avatarUrl }} style={styles.modalAvatar} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.modalMemberName}>{item.full_name}</Text>
-                      <Text style={styles.modalMemberSub}>{item.member_number}</Text>
-                    </View>
-                    <Text style={styles.modalCheckInText}>Check In →</Text>
-                  </TouchableOpacity>
-                );
-              }}
-            />
-            <TouchableOpacity
-              style={styles.modalCloseBtn}
-              onPress={() => setMemberPickerVisible(false)}
-            >
-              <Text style={styles.modalCloseText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
+      {/* Member Picker In-Frame Modal */}
+      <AppModal
+        visible={memberPickerVisible}
+        onClose={() => setMemberPickerVisible(false)}
+      >
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>Select Member to Check In</Text>
+          <FlatList
+            data={members}
+            keyExtractor={m => m.id}
+            style={{ maxHeight: 360 }}
+            renderItem={({ item }) => {
+              const avatarUrl = getMemberAvatar(item.full_name, item.photo_uri);
+              const alreadyIn = AttendanceRepository.hasCheckedInToday(item.id);
+              return (
+                <TouchableOpacity
+                  style={[styles.modalItem, alreadyIn && { opacity: 0.6 }]}
+                  onPress={() => handleCheckInMember(item)}
+                  disabled={alreadyIn}
+                >
+                  <Image source={{ uri: avatarUrl }} style={styles.modalAvatar} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.modalMemberName}>{item.full_name}</Text>
+                    <Text style={styles.modalMemberSub}>{item.member_number}</Text>
+                  </View>
+                  <Text style={[styles.modalCheckInText, alreadyIn && { color: '#10B981' }]}>
+                    {alreadyIn ? 'Present ✓' : 'Check In →'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            }}
+          />
+          <TouchableOpacity
+            style={styles.modalCloseBtn}
+            onPress={() => setMemberPickerVisible(false)}
+          >
+            <Text style={styles.modalCloseText}>Cancel</Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
+      </AppModal>
     </SafeAreaView>
   );
 }

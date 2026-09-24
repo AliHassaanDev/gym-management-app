@@ -52,8 +52,10 @@ export default function RootLayout() {
         contentStyle: { backgroundColor: Colors.background },
       }}
     >
-      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="index" />
       <Stack.Screen name="welcome" />
+      <Stack.Screen name="login" />
+      <Stack.Screen name="(tabs)" />
       <Stack.Screen name="members/add" />
       <Stack.Screen name="members/[id]" />
       <Stack.Screen name="revenue/payment-status" />

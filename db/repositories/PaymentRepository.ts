@@ -97,10 +97,35 @@ export const PaymentRepository = {
   markPaid: (paymentId: string, method: string = 'cash'): void => {
     const db = getDB();
     const now = new Date().toISOString();
+
+    // 1. Fetch current payment info
+    const payment = db.getFirstSync(`SELECT * FROM payments WHERE id=?`, [paymentId]) as Payment | null;
+
+    // 2. Mark payment as paid
     db.runSync(
       `UPDATE payments SET payment_status='paid', paid_at=?, payment_method=?, sync_status='pending', updated_at=? WHERE id=?`,
       [now, method, now, paymentId]
     );
+
+    // 3. Update member's next due date so payment_status switches to 'paid'
+    if (payment && payment.member_id) {
+      const member = db.getFirstSync(
+        `SELECT m.*, p.duration_days FROM members m LEFT JOIN plans p ON m.plan_id = p.id WHERE m.id=?`,
+        [payment.member_id]
+      ) as any;
+
+      if (member) {
+        const duration = member.duration_days || 30;
+        const nextDate = new Date();
+        nextDate.setDate(nextDate.getDate() + duration);
+        const nextDueDateStr = nextDate.toISOString().split('T')[0];
+
+        db.runSync(
+          `UPDATE members SET next_due_date=?, sync_status='pending', updated_at=? WHERE id=?`,
+          [nextDueDateStr, now, member.id]
+        );
+      }
+    }
   },
 
   insert: (payment: Omit<Payment, 'id' | 'sync_status' | 'updated_at'>): void => {

@@ -8,7 +8,6 @@ import {
   Image,
   Alert,
   TextInput,
-  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,12 +16,14 @@ import { Fonts, Radius, Shadow } from '../../constants/theme';
 import { MemberRepository } from '../../db/repositories/MemberRepository';
 import { PaymentRepository } from '../../db/repositories/PaymentRepository';
 import { PlanRepository, Plan } from '../../db/repositories/PlanRepository';
+import { AppModal } from '../../components/ui/AppModal';
 import {
   ChevronLeftIcon,
   ChevronDownIcon,
   CameraIcon,
   CalendarIcon,
   CheckCircleIcon,
+  AlertCircleIcon,
 } from '../../components/ui/Icons';
 import { addDays } from '../../utils/helpers';
 
@@ -30,14 +31,19 @@ export default function AddMemberScreen() {
   const router = useRouter();
   const plans = PlanRepository.getAll();
 
+  const todayStr = new Date().toISOString().split('T')[0];
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [age, setAge] = useState('');
-  const [gender, setGender] = useState<'Male' | 'Female' | ''>('Male');
+  const [gender, setGender] = useState<'Male' | 'Female'>('Male');
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(plans[0] ?? null);
-  const [joiningDate, setJoiningDate] = useState('22-09-2025');
+  const [joiningDate, setJoiningDate] = useState(todayStr);
+  const [paymentOption, setPaymentOption] = useState<'paid' | 'due'>('paid');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'online'>('cash');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
   const [planPickerOpen, setPlanPickerOpen] = useState(false);
   const [genderPickerOpen, setGenderPickerOpen] = useState(false);
 
@@ -62,30 +68,59 @@ export default function AddMemberScreen() {
     }
   };
 
-  const handleSave = () => {
-    if (!fullName.trim()) {
-      Alert.alert('Missing Field', 'Please enter member full name.');
-      return;
+  const validate = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    if (!fullName.trim() || fullName.trim().length < 2) {
+      newErrors.fullName = 'Please enter a valid full name (at least 2 letters)';
     }
-    if (!phone.trim()) {
-      Alert.alert('Missing Field', 'Please enter member phone number.');
-      return;
+
+    const cleanPhone = phone.trim().replace(/[\s-]/g, '');
+    if (!cleanPhone || cleanPhone.length < 7) {
+      newErrors.phone = 'Please enter a valid phone number (at least 7 digits)';
     }
+
+    const parsedAge = parseInt(age.trim(), 10);
+    if (!age.trim() || isNaN(parsedAge) || parsedAge < 10 || parsedAge > 95) {
+      newErrors.age = 'Please enter a valid age between 10 and 95';
+    }
+
+    if (!gender) {
+      newErrors.gender = 'Please select a gender';
+    }
+
     if (!selectedPlan) {
-      Alert.alert('Missing Field', 'Please select a membership plan.');
+      newErrors.plan = 'Please select a membership plan';
+    }
+
+    if (!joiningDate.trim()) {
+      newErrors.joiningDate = 'Please enter joining date';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSave = () => {
+    if (!validate()) {
+      Alert.alert('Validation Error', 'Please check highlighted fields before saving.');
       return;
     }
+
+    if (!selectedPlan) return;
 
     setLoading(true);
     try {
-      const isoJoinDate = new Date().toISOString().split('T')[0];
+      const isoJoinDate = joiningDate.trim() || todayStr;
       const nextDueDate = addDays(isoJoinDate, selectedPlan.duration_days);
+      const parsedAge = parseInt(age.trim(), 10);
 
+      // 1. Insert real member
       const member = MemberRepository.insert({
         full_name: fullName.trim(),
         phone: phone.trim(),
-        age: age ? parseInt(age, 10) : 22,
-        gender: gender.toLowerCase() || 'male',
+        age: parsedAge,
+        gender: gender.toLowerCase(),
         photo_uri: photoUri,
         plan_id: selectedPlan.id,
         joining_date: isoJoinDate,
@@ -93,20 +128,44 @@ export default function AddMemberScreen() {
         status: 'active',
       });
 
-      PaymentRepository.insert({
-        member_id: member.id,
-        amount: selectedPlan.price,
-        paid_at: null,
-        due_date: nextDueDate,
-        payment_status: 'due',
-        payment_method: 'cash',
-        notes: null,
-      });
+      // 2. Insert initial payment record matching selection
+      if (paymentOption === 'paid') {
+        PaymentRepository.insert({
+          member_id: member.id,
+          amount: selectedPlan.price,
+          paid_at: new Date().toISOString(),
+          due_date: nextDueDate,
+          payment_status: 'paid',
+          payment_method: paymentMethod,
+          notes: 'Initial registration fee',
+        });
+      } else {
+        PaymentRepository.insert({
+          member_id: member.id,
+          amount: selectedPlan.price,
+          paid_at: null,
+          due_date: nextDueDate,
+          payment_status: 'due',
+          payment_method: paymentMethod,
+          notes: 'Pending initial payment',
+        });
+      }
+
+      // DO NOT add dummy attendance or dummy past payments!
 
       Alert.alert(
-        'Member Added',
-        `${fullName} has been registered successfully with ID ${member.member_number}.`,
-        [{ text: 'OK', onPress: () => router.back() }]
+        'Member Added Successfully! 🎉',
+        `${fullName.trim()} has been registered with ID ${member.member_number}.`,
+        [
+          {
+            text: 'View Member',
+            onPress: () => router.replace(`/members/${member.id}`),
+          },
+          {
+            text: 'Done',
+            onPress: () => router.back(),
+          },
+        ]
       );
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'Failed to register member.');
@@ -123,7 +182,7 @@ export default function AddMemberScreen() {
           <ChevronLeftIcon size={20} color="#0F172A" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Add Member</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 36 }} />
       </View>
 
       <ScrollView
@@ -140,7 +199,9 @@ export default function AddMemberScreen() {
               <CameraIcon size={26} color="#64748B" />
             </View>
           )}
-          <Text style={styles.addPhotoText}>Add Photo</Text>
+          <Text style={styles.addPhotoText}>
+            {photoUri ? 'Change Photo' : 'Add Photo'}
+          </Text>
         </TouchableOpacity>
 
         {/* Section Heading */}
@@ -150,25 +211,43 @@ export default function AddMemberScreen() {
         <View style={styles.fieldGroup}>
           <Text style={styles.fieldLabel}>Full Name *</Text>
           <TextInput
-            style={styles.textInput}
-            placeholder="Enter full name"
+            style={[styles.textInput, errors.fullName ? styles.inputError : null]}
+            placeholder="Enter full name (e.g. Ali Raza)"
             placeholderTextColor="#94A3B8"
             value={fullName}
-            onChangeText={setFullName}
+            onChangeText={(t) => {
+              setFullName(t);
+              if (errors.fullName) setErrors(prev => ({ ...prev, fullName: '' }));
+            }}
           />
+          {errors.fullName ? (
+            <View style={styles.errorRow}>
+              <AlertCircleIcon size={14} color="#EF4444" />
+              <Text style={styles.errorSub}>{errors.fullName}</Text>
+            </View>
+          ) : null}
         </View>
 
         {/* Phone Number */}
         <View style={styles.fieldGroup}>
           <Text style={styles.fieldLabel}>Phone Number *</Text>
           <TextInput
-            style={styles.textInput}
-            placeholder="Enter phone number"
+            style={[styles.textInput, errors.phone ? styles.inputError : null]}
+            placeholder="Enter phone number (e.g. 0300 1234567)"
             placeholderTextColor="#94A3B8"
             value={phone}
-            onChangeText={setPhone}
+            onChangeText={(t) => {
+              setPhone(t);
+              if (errors.phone) setErrors(prev => ({ ...prev, phone: '' }));
+            }}
             keyboardType="phone-pad"
           />
+          {errors.phone ? (
+            <View style={styles.errorRow}>
+              <AlertCircleIcon size={14} color="#EF4444" />
+              <Text style={styles.errorSub}>{errors.phone}</Text>
+            </View>
+          ) : null}
         </View>
 
         {/* Age & Gender (2-columns row) */}
@@ -176,13 +255,22 @@ export default function AddMemberScreen() {
           <View style={[styles.fieldGroup, { flex: 1 }]}>
             <Text style={styles.fieldLabel}>Age *</Text>
             <TextInput
-              style={styles.textInput}
-              placeholder="Enter age"
+              style={[styles.textInput, errors.age ? styles.inputError : null]}
+              placeholder="e.g. 24"
               placeholderTextColor="#94A3B8"
               value={age}
-              onChangeText={setAge}
+              onChangeText={(t) => {
+                setAge(t);
+                if (errors.age) setErrors(prev => ({ ...prev, age: '' }));
+              }}
               keyboardType="numeric"
+              maxLength={2}
             />
+            {errors.age ? (
+              <View style={styles.errorRow}>
+                <Text style={styles.errorSub}>{errors.age}</Text>
+              </View>
+            ) : null}
           </View>
 
           <View style={[styles.fieldGroup, { flex: 1 }]}>
@@ -192,9 +280,7 @@ export default function AddMemberScreen() {
               onPress={() => setGenderPickerOpen(true)}
               activeOpacity={0.8}
             >
-              <Text style={gender ? styles.selectText : styles.placeholderText}>
-                {gender || 'Select gender'}
-              </Text>
+              <Text style={styles.selectText}>{gender}</Text>
               <ChevronDownIcon size={16} color="#64748B" />
             </TouchableOpacity>
           </View>
@@ -209,7 +295,9 @@ export default function AddMemberScreen() {
             activeOpacity={0.8}
           >
             <Text style={selectedPlan ? styles.selectText : styles.placeholderText}>
-              {selectedPlan ? `${selectedPlan.name} (PKR ${selectedPlan.price.toLocaleString()})` : 'Select plan'}
+              {selectedPlan
+                ? `${selectedPlan.name} · PKR ${selectedPlan.price.toLocaleString()}`
+                : 'Select plan'}
             </Text>
             <ChevronDownIcon size={16} color="#64748B" />
           </TouchableOpacity>
@@ -217,17 +305,93 @@ export default function AddMemberScreen() {
 
         {/* Joining Date */}
         <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>Joining Date *</Text>
+          <Text style={styles.fieldLabel}>Joining Date (YYYY-MM-DD) *</Text>
           <View style={styles.dateInputWrap}>
             <TextInput
               style={styles.dateTextInput}
               value={joiningDate}
               onChangeText={setJoiningDate}
-              placeholder="DD-MM-YYYY"
+              placeholder="YYYY-MM-DD"
               placeholderTextColor="#94A3B8"
             />
             <CalendarIcon size={18} color="#64748B" />
           </View>
+        </View>
+
+        {/* Initial Payment Status Selector */}
+        <View style={styles.paymentSection}>
+          <Text style={styles.sectionTitle}>Initial Payment Status</Text>
+          <View style={styles.paymentToggleRow}>
+            <TouchableOpacity
+              style={[
+                styles.payToggleBtn,
+                paymentOption === 'paid' && styles.payToggleBtnActivePaid,
+              ]}
+              onPress={() => setPaymentOption('paid')}
+              activeOpacity={0.8}
+            >
+              <CheckCircleIcon
+                size={16}
+                color={paymentOption === 'paid' ? '#16A34A' : '#94A3B8'}
+              />
+              <Text
+                style={[
+                  styles.payToggleText,
+                  paymentOption === 'paid' && styles.payToggleTextActivePaid,
+                ]}
+              >
+                Paid Now
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.payToggleBtn,
+                paymentOption === 'due' && styles.payToggleBtnActiveDue,
+              ]}
+              onPress={() => setPaymentOption('due')}
+              activeOpacity={0.8}
+            >
+              <AlertCircleIcon
+                size={16}
+                color={paymentOption === 'due' ? '#D97706' : '#94A3B8'}
+              />
+              <Text
+                style={[
+                  styles.payToggleText,
+                  paymentOption === 'due' && styles.payToggleTextActiveDue,
+                ]}
+              >
+                Pay Later (Due)
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Payment Method (if Paid Now) */}
+          {paymentOption === 'paid' ? (
+            <View style={styles.methodRow}>
+              <Text style={styles.methodLabel}>Method:</Text>
+              {(['cash', 'online'] as const).map((m) => (
+                <TouchableOpacity
+                  key={m}
+                  style={[
+                    styles.methodPill,
+                    paymentMethod === m && styles.methodPillActive,
+                  ]}
+                  onPress={() => setPaymentMethod(m)}
+                >
+                  <Text
+                    style={[
+                      styles.methodPillText,
+                      paymentMethod === m && styles.methodPillTextActive,
+                    ]}
+                  >
+                    {m.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
         </View>
 
         {/* Yellow "Save Member" Pill Button */}
@@ -237,62 +401,76 @@ export default function AddMemberScreen() {
           disabled={loading}
           activeOpacity={0.85}
         >
-          <Text style={styles.saveBtnText}>{loading ? 'Saving...' : 'Save Member'}</Text>
+          <Text style={styles.saveBtnText}>
+            {loading ? 'Registering...' : 'Save Member'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Plan Selection Modal */}
-      <Modal visible={planPickerOpen} transparent animationType="slide">
-        <View style={styles.modalBg}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Select Membership Plan</Text>
-            {plans.map(p => (
-              <TouchableOpacity
-                key={p.id}
-                style={[styles.modalOption, selectedPlan?.id === p.id && styles.modalOptionActive]}
-                onPress={() => {
-                  setSelectedPlan(p);
-                  setPlanPickerOpen(false);
-                }}
-              >
-                <View>
-                  <Text style={styles.optionName}>{p.name}</Text>
-                  <Text style={styles.optionSub}>{p.duration_days} days · {p.type === 'personal_training' ? 'Personal Training' : 'Gym Membership'}</Text>
-                </View>
-                <Text style={styles.optionPrice}>PKR {p.price.toLocaleString()}</Text>
-              </TouchableOpacity>
-            ))}
+      {/* Plan Selection In-Frame Modal */}
+      <AppModal
+        visible={planPickerOpen}
+        onClose={() => setPlanPickerOpen(false)}
+      >
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>Select Membership Plan</Text>
+          {plans.map((p) => (
             <TouchableOpacity
-              style={styles.modalCloseBtn}
-              onPress={() => setPlanPickerOpen(false)}
+              key={p.id}
+              style={[
+                styles.modalOption,
+                selectedPlan?.id === p.id && styles.modalOptionActive,
+              ]}
+              onPress={() => {
+                setSelectedPlan(p);
+                setPlanPickerOpen(false);
+              }}
             >
-              <Text style={styles.modalCloseText}>Cancel</Text>
+              <View>
+                <Text style={styles.optionName}>{p.name}</Text>
+                <Text style={styles.optionSub}>
+                  {p.duration_days} days ·{' '}
+                  {p.type === 'personal_training'
+                    ? 'Personal Training'
+                    : 'Gym Membership'}
+                </Text>
+              </View>
+              <Text style={styles.optionPrice}>
+                PKR {p.price.toLocaleString()}
+              </Text>
             </TouchableOpacity>
-          </View>
+          ))}
+          <TouchableOpacity
+            style={styles.modalCloseBtn}
+            onPress={() => setPlanPickerOpen(false)}
+          >
+            <Text style={styles.modalCloseText}>Cancel</Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
+      </AppModal>
 
-      {/* Gender Selection Modal */}
-      <Modal visible={genderPickerOpen} transparent animationType="fade">
-        <View style={styles.modalBg}>
-          <View style={[styles.modalCard, { paddingBottom: 24 }]}>
-            <Text style={styles.modalTitle}>Select Gender</Text>
-            {(['Male', 'Female'] as const).map(g => (
-              <TouchableOpacity
-                key={g}
-                style={styles.modalOption}
-                onPress={() => {
-                  setGender(g);
-                  setGenderPickerOpen(false);
-                }}
-              >
-                <Text style={styles.optionName}>{g}</Text>
-                {gender === g && <CheckCircleIcon size={18} color="#16A34A" />}
-              </TouchableOpacity>
-            ))}
-          </View>
+      {/* Gender Selection In-Frame Modal */}
+      <AppModal
+        visible={genderPickerOpen}
+        onClose={() => setGenderPickerOpen(false)}
+      >
+        <View style={[styles.modalCard, { paddingBottom: 24 }]}>
+          <Text style={styles.modalTitle}>Select Gender</Text>
+          {(['Male', 'Female'] as const).map((g) => (
+            <TouchableOpacity
+              key={g}
+              style={styles.modalOption}
+              onPress={() => {
+                setGender(g);
+                setGenderPickerOpen(false);
+              }}
+            >
+              <Text style={styles.optionName}>{g}</Text>
+              {gender === g && <CheckCircleIcon size={18} color="#16A34A" />}
+            </TouchableOpacity>
+          ))}
         </View>
-      </Modal>
+      </AppModal>
     </SafeAreaView>
   );
 }
@@ -326,30 +504,30 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 16,
     paddingBottom: 40,
   },
 
   photoWrap: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   photoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     backgroundColor: '#F8FAFC',
     borderWidth: 1.5,
     borderColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   photoImg: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginBottom: 8,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    marginBottom: 6,
   },
   addPhotoText: {
     fontFamily: Fonts.medium,
@@ -359,12 +537,12 @@ const styles = StyleSheet.create({
 
   sectionTitle: {
     fontFamily: Fonts.bold,
-    fontSize: 16,
+    fontSize: 15,
     color: '#0F172A',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   fieldGroup: {
-    marginBottom: 16,
+    marginBottom: 14,
   },
   fieldLabel: {
     fontFamily: Fonts.medium,
@@ -378,11 +556,27 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     borderRadius: Radius.md,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 11,
     fontFamily: Fonts.regular,
     fontSize: 14,
     color: '#0F172A',
   },
+  inputError: {
+    borderColor: '#EF4444',
+    backgroundColor: '#FEF2F2',
+  },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  errorSub: {
+    fontFamily: Fonts.regular,
+    fontSize: 11,
+    color: '#DC2626',
+  },
+
   twoColRow: {
     flexDirection: 'row',
     gap: 12,
@@ -393,7 +587,7 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     borderRadius: Radius.md,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 11,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -414,7 +608,7 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     borderRadius: Radius.md,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 9,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -426,13 +620,93 @@ const styles = StyleSheet.create({
     color: '#0F172A',
   },
 
+  paymentSection: {
+    marginTop: 6,
+    marginBottom: 16,
+    backgroundColor: '#F8FAFC',
+    borderRadius: Radius.md,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  paymentToggleRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  payToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: Radius.md,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  payToggleBtnActivePaid: {
+    borderColor: '#16A34A',
+    backgroundColor: '#F0FDF4',
+  },
+  payToggleBtnActiveDue: {
+    borderColor: '#D97706',
+    backgroundColor: '#FEF3C7',
+  },
+  payToggleText: {
+    fontFamily: Fonts.medium,
+    fontSize: 13,
+    color: '#64748B',
+  },
+  payToggleTextActivePaid: {
+    color: '#16A34A',
+    fontFamily: Fonts.bold,
+  },
+  payToggleTextActiveDue: {
+    color: '#D97706',
+    fontFamily: Fonts.bold,
+  },
+  methodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  methodLabel: {
+    fontFamily: Fonts.medium,
+    fontSize: 12,
+    color: '#64748B',
+  },
+  methodPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  methodPillActive: {
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
+  },
+  methodPillText: {
+    fontFamily: Fonts.medium,
+    fontSize: 11,
+    color: '#64748B',
+  },
+  methodPillTextActive: {
+    color: '#FFFFFF',
+    fontFamily: Fonts.bold,
+  },
+
   saveBtn: {
     backgroundColor: '#F59E0B',
     borderRadius: Radius.md,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
+    marginTop: 10,
     ...Shadow.sm,
   },
   saveBtnText: {
@@ -441,39 +715,35 @@ const styles = StyleSheet.create({
     color: '#0F172A',
   },
 
-  modalBg: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
   modalCard: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 24,
+    padding: 20,
+    ...Shadow.card,
   },
   modalTitle: {
     fontFamily: Fonts.bold,
-    fontSize: 18,
+    fontSize: 17,
     color: '#0F172A',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   modalOption: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
   },
   modalOptionActive: {
     backgroundColor: '#FEF3C7',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     borderRadius: 8,
   },
   optionName: {
     fontFamily: Fonts.semiBold,
-    fontSize: 15,
+    fontSize: 14,
     color: '#0F172A',
   },
   optionSub: {
@@ -488,8 +758,8 @@ const styles = StyleSheet.create({
     color: '#D97706',
   },
   modalCloseBtn: {
-    marginTop: 16,
-    paddingVertical: 12,
+    marginTop: 14,
+    paddingVertical: 10,
     alignItems: 'center',
   },
   modalCloseText: {

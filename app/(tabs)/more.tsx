@@ -25,6 +25,9 @@ import {
 } from '../../components/ui/Icons';
 import { OWNER_AVATAR } from '../../constants/mockAvatars';
 
+import { AuthService } from '../../services/AuthService';
+import { AppModal } from '../../components/ui/AppModal';
+
 export default function SettingsScreen() {
   const router = useRouter();
   const [gymModalVisible, setGymModalVisible] = useState(false);
@@ -35,7 +38,14 @@ export default function SettingsScreen() {
   const handleLogout = () => {
     Alert.alert('Log Out', 'Are you sure you want to log out of GYM PAGLU?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Log Out', style: 'destructive', onPress: () => router.replace('/welcome') },
+      {
+        text: 'Log Out',
+        style: 'destructive',
+        onPress: () => {
+          AuthService.logout();
+          router.replace('/welcome');
+        },
+      },
     ]);
   };
 
@@ -150,12 +160,10 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Gym Details Modal */}
-      <Modal
+      {/* Gym Details In-Frame Modal */}
+      <AppModal
         visible={gymModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setGymModalVisible(false)}
+        onClose={() => setGymModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
@@ -207,7 +215,7 @@ export default function SettingsScreen() {
             </View>
           </View>
         </View>
-      </Modal>
+      </AppModal>
     </SafeAreaView>
   );
 }

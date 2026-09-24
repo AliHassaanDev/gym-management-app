@@ -14,6 +14,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts, Radius, Shadow } from '../../../constants/theme';
 import { MemberRepository, Member } from '../../../db/repositories/MemberRepository';
+import { AppModal } from '../../../components/ui/AppModal';
 import {
   SearchIcon,
   SlidersIcon,
@@ -65,10 +66,10 @@ export default function MembersScreen() {
   });
 
   const counts = {
-    all: members.length > 0 ? members.length : 128,
-    paid: members.filter(m => m.payment_status === 'paid').length || 102,
-    due: members.filter(m => m.payment_status === 'due').length || 18,
-    overdue: members.filter(m => m.payment_status === 'overdue').length || 8,
+    all: members.length,
+    paid: members.filter(m => m.payment_status === 'paid').length,
+    due: members.filter(m => m.payment_status === 'due').length,
+    overdue: members.filter(m => m.payment_status === 'overdue').length,
   };
 
   const FILTERS: { key: Filter; label: string }[] = [
@@ -180,40 +181,41 @@ export default function MembersScreen() {
         }
       />
 
-      {/* Sort / Filter Modal */}
-      <Modal visible={filterModalVisible} transparent animationType="slide">
-        <View style={styles.modalBg}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalHeading}>Sort Members By</Text>
-            {[
-              { key: 'id', label: 'Member ID (#G001, #G002...)' },
-              { key: 'name', label: 'Name (A to Z)' },
-              { key: 'age', label: 'Age (Youngest First)' },
-            ].map(opt => (
-              <TouchableOpacity
-                key={opt.key}
-                style={styles.modalOption}
-                onPress={() => {
-                  setSortBy(opt.key as any);
-                  setFilterModalVisible(false);
-                }}
-              >
-                <Text style={[styles.modalOptionText, sortBy === opt.key && styles.modalOptionTextActive]}>
-                  {opt.label}
-                </Text>
-                {sortBy === opt.key && <CheckCircleIcon size={18} color="#16A34A" />}
-              </TouchableOpacity>
-            ))}
-
+      {/* Sort / Filter In-Frame Modal */}
+      <AppModal
+        visible={filterModalVisible}
+        onClose={() => setFilterModalVisible(false)}
+      >
+        <View style={styles.modalCard}>
+          <Text style={styles.modalHeading}>Sort Members By</Text>
+          {[
+            { key: 'id', label: 'Member ID (#G001, #G002...)' },
+            { key: 'name', label: 'Name (A to Z)' },
+            { key: 'age', label: 'Age (Youngest First)' },
+          ].map(opt => (
             <TouchableOpacity
-              style={styles.modalCloseBtn}
-              onPress={() => setFilterModalVisible(false)}
+              key={opt.key}
+              style={styles.modalOption}
+              onPress={() => {
+                setSortBy(opt.key as any);
+                setFilterModalVisible(false);
+              }}
             >
-              <Text style={styles.modalCloseText}>Done</Text>
+              <Text style={[styles.modalOptionText, sortBy === opt.key && styles.modalOptionTextActive]}>
+                {opt.label}
+              </Text>
+              {sortBy === opt.key && <CheckCircleIcon size={18} color="#16A34A" />}
             </TouchableOpacity>
-          </View>
+          ))}
+
+          <TouchableOpacity
+            style={styles.modalCloseBtn}
+            onPress={() => setFilterModalVisible(false)}
+          >
+            <Text style={styles.modalCloseText}>Done</Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
+      </AppModal>
     </SafeAreaView>
   );
 }

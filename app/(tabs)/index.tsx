@@ -47,12 +47,12 @@ export default function DashboardScreen() {
     const att = AttendanceRepository.getTodayCount();
 
     setStats({
-      totalMembers: members.length > 0 ? members.length : 128,
-      monthlyRevenue: rev > 0 ? rev : 256000,
-      paid: paid > 0 ? paid : 102,
-      due: due > 0 ? due : 18,
-      overdue: overdue > 0 ? overdue : 8,
-      todayAttendance: att > 0 ? att : 24,
+      totalMembers: members.length,
+      monthlyRevenue: rev,
+      paid: paid,
+      due: due,
+      overdue: overdue,
+      todayAttendance: att,
     });
   }, []);
 

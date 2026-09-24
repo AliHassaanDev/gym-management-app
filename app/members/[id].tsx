@@ -16,6 +16,7 @@ import { Fonts, Radius, Shadow } from '../../constants/theme';
 import { MemberRepository, Member } from '../../db/repositories/MemberRepository';
 import { PaymentRepository, Payment } from '../../db/repositories/PaymentRepository';
 import { AttendanceRepository, Attendance } from '../../db/repositories/AttendanceRepository';
+import { AppModal } from '../../components/ui/AppModal';
 import {
   ChevronLeftIcon,
   PhoneIcon,
@@ -176,7 +177,7 @@ export default function MemberProfileScreen() {
               <DetailRow
                 icon={<WalletIcon size={16} color="#64748B" />}
                 label="Total Paid"
-                value={formatPKR(totalPaid || 12000)}
+                value={formatPKR(totalPaid)}
               />
               <DetailRow
                 icon={<ClockIcon size={16} color="#64748B" />}
@@ -229,94 +230,94 @@ export default function MemberProfileScreen() {
         {activeTab === 'attendance' && (
           <View style={styles.detailsCard}>
             <View style={styles.attHeaderRow}>
-              <Text style={styles.attCountBig}>{attendance.length || 24}</Text>
+              <Text style={styles.attCountBig}>{attendance.length}</Text>
               <Text style={styles.attCountLabel}>Total check-ins recorded</Text>
             </View>
-            {attendance.slice(0, 15).map(a => (
-              <View key={a.id} style={styles.attItem}>
-                <CheckCircleIcon size={18} color="#16A34A" />
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.attDate}>{formatDateTime(a.check_in_at)}</Text>
-                  <Text style={styles.attSub}>{a.method === 'biometric' ? 'Biometric scanner' : 'Manual entry'}</Text>
+            {attendance.length === 0 ? (
+              <Text style={styles.emptyText}>No check-ins recorded yet for this member.</Text>
+            ) : (
+              attendance.slice(0, 15).map(a => (
+                <View key={a.id} style={styles.attItem}>
+                  <CheckCircleIcon size={18} color="#16A34A" />
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={styles.attDate}>{formatDateTime(a.check_in_at)}</Text>
+                    <Text style={styles.attSub}>{a.method === 'biometric' ? 'Biometric scanner' : 'Manual entry'}</Text>
+                  </View>
+                  <StatusBadge status="active" small />
                 </View>
-                <StatusBadge status="active" small />
-              </View>
-            ))}
+              ))
+            )}
           </View>
         )}
       </ScrollView>
 
-      {/* Edit Profile Modal */}
-      <Modal
+      {/* Edit Profile In-Frame Modal */}
+      <AppModal
         visible={editModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setEditModalVisible(false)}
+        onClose={() => setEditModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Edit Member Profile</Text>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>Edit Member Profile</Text>
 
-            <Text style={styles.inputLabel}>Phone Number</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={editPhone}
-              onChangeText={setEditPhone}
-              placeholder="0300-1234567"
-              placeholderTextColor="#94A3B8"
-              keyboardType="phone-pad"
-            />
+          <Text style={styles.inputLabel}>Phone Number</Text>
+          <TextInput
+            style={styles.modalInput}
+            value={editPhone}
+            onChangeText={setEditPhone}
+            placeholder="0300-1234567"
+            placeholderTextColor="#94A3B8"
+            keyboardType="phone-pad"
+          />
 
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.inputLabel}>Age</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={editAge}
-                  onChangeText={setEditAge}
-                  placeholder="24"
-                  placeholderTextColor="#94A3B8"
-                  keyboardType="numeric"
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.inputLabel}>Gender</Text>
-                <View style={styles.genderRow}>
-                  <TouchableOpacity
-                    style={[styles.genderBtn, editGender === 'male' && styles.genderBtnActive]}
-                    onPress={() => setEditGender('male')}
-                  >
-                    <Text style={[styles.genderText, editGender === 'male' && styles.genderTextActive]}>Male</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.genderBtn, editGender === 'female' && styles.genderBtnActive]}
-                    onPress={() => setEditGender('female')}
-                  >
-                    <Text style={[styles.genderText, editGender === 'female' && styles.genderTextActive]}>Female</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.inputLabel}>Age</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editAge}
+                onChangeText={setEditAge}
+                placeholder="24"
+                placeholderTextColor="#94A3B8"
+                keyboardType="numeric"
+              />
             </View>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => setEditModalVisible(false)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.cancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.saveBtn}
-                onPress={handleSaveProfile}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.saveBtnText}>Save Changes</Text>
-              </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.inputLabel}>Gender</Text>
+              <View style={styles.genderRow}>
+                <TouchableOpacity
+                  style={[styles.genderBtn, editGender === 'male' && styles.genderBtnActive]}
+                  onPress={() => setEditGender('male')}
+                >
+                  <Text style={[styles.genderText, editGender === 'male' && styles.genderTextActive]}>Male</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.genderBtn, editGender === 'female' && styles.genderBtnActive]}
+                  onPress={() => setEditGender('female')}
+                >
+                  <Text style={[styles.genderText, editGender === 'female' && styles.genderTextActive]}>Female</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
+
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={() => setEditModalVisible(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.saveBtn}
+              onPress={handleSaveProfile}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.saveBtnText}>Save Changes</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </Modal>
+      </AppModal>
     </SafeAreaView>
   );
 }

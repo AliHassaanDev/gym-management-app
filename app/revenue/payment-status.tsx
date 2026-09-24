@@ -38,9 +38,9 @@ export default function PaymentStatusScreen() {
     const overdueList = allPayments.filter(p => p.payment_status === 'overdue');
 
     setCounts({
-      paid: paidList.length > 0 ? paidList.length : 102,
-      due: dueList.length > 0 ? dueList.length : 18,
-      overdue: overdueList.length > 0 ? overdueList.length : 8,
+      paid: paidList.length,
+      due: dueList.length,
+      overdue: overdueList.length,
     });
 
     if (activeTab === 'paid') {
@@ -75,6 +75,7 @@ export default function PaymentStatusScreen() {
           onPress: () => {
             PaymentRepository.markPaid(payment.id, 'cash');
             loadData();
+            Alert.alert('Payment Received ✓', `${formatPKR(payment.amount)} marked as paid.`);
           },
         },
         {
@@ -82,6 +83,7 @@ export default function PaymentStatusScreen() {
           onPress: () => {
             PaymentRepository.markPaid(payment.id, 'online');
             loadData();
+            Alert.alert('Payment Received ✓', `${formatPKR(payment.amount)} marked as paid.`);
           },
         },
       ]

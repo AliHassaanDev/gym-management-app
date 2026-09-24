@@ -40,7 +40,7 @@ export default function WelcomeScreen() {
             <View style={styles.bottomWrapper}>
               <TouchableOpacity
                 style={styles.getStartedBtn}
-                onPress={() => router.replace('/(tabs)')}
+                onPress={() => router.push('/login')}
                 activeOpacity={0.85}
               >
                 <Text style={styles.getStartedBtnText}>Get Started</Text>
@@ -48,7 +48,7 @@ export default function WelcomeScreen() {
 
               <TouchableOpacity
                 style={styles.loginBtn}
-                onPress={() => router.replace('/(tabs)')}
+                onPress={() => router.push('/login')}
                 activeOpacity={0.8}
               >
                 <Text style={styles.loginBtnText}>Login</Text>
