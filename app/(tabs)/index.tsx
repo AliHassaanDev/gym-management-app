@@ -26,6 +26,8 @@ import {
 import { OWNER_AVATAR, ATHLETE_BANNER_IMAGE } from '../../constants/mockAvatars';
 import { formatPKR } from '../../utils/helpers';
 
+import { NotificationService } from '../../services/NotificationService';
+
 export default function DashboardScreen() {
   const router = useRouter();
   const [stats, setStats] = useState({
@@ -36,9 +38,11 @@ export default function DashboardScreen() {
     overdue: 8,
     todayAttendance: 24,
   });
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadStats = useCallback(() => {
+    setUnreadNotifCount(NotificationService.getUnreadCount());
     const members = MemberRepository.getAll();
     const paid = members.filter(m => m.payment_status === 'paid').length;
     const due = members.filter(m => m.payment_status === 'due').length;
@@ -91,7 +95,7 @@ export default function DashboardScreen() {
               activeOpacity={0.7}
             >
               <BellIcon size={22} color="#0F172A" />
-              <View style={styles.notifDot} />
+              {unreadNotifCount > 0 && <View style={styles.notifDot} />}
             </TouchableOpacity>
 
             <TouchableOpacity

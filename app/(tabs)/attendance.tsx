@@ -17,9 +17,11 @@ import { AttendanceRepository, Attendance } from '../../db/repositories/Attendan
 import { MemberRepository, Member } from '../../db/repositories/MemberRepository';
 import { BiometricService } from '../../services/BiometricService';
 import { AppModal } from '../../components/ui/AppModal';
+import { NotificationService } from '../../services/NotificationService';
 import {
   ChevronLeftIcon,
   FingerprintIcon,
+  CheckCircleIcon,
 } from '../../components/ui/Icons';
 import { getMemberAvatar } from '../../constants/mockAvatars';
 
@@ -32,6 +34,7 @@ export default function AttendanceScreen() {
   const [todayAttendances, setTodayAttendances] = useState<Attendance[]>([]);
   const [scanning, setScanning] = useState(false);
   const [memberPickerVisible, setMemberPickerVisible] = useState(false);
+  const [checkInToast, setCheckInToast] = useState<string | null>(null);
 
   const loadData = useCallback(() => {
     const all = MemberRepository.getAll();
@@ -60,7 +63,8 @@ export default function AttendanceScreen() {
       if (success) {
         setMemberPickerVisible(true);
       } else {
-        Alert.alert('Scan Cancelled', 'Fingerprint verification was not completed.');
+        setCheckInToast('Fingerprint verification was not completed.');
+        setTimeout(() => setCheckInToast(null), 3000);
       }
     } catch {
       setMemberPickerVisible(true);
@@ -72,17 +76,26 @@ export default function AttendanceScreen() {
   const handleCheckInMember = (member: Member) => {
     try {
       if (AttendanceRepository.hasCheckedInToday(member.id)) {
-        Alert.alert('Already Checked In', `${member.full_name} has already checked in today.`);
+        setCheckInToast(`${member.full_name} has already checked in today.`);
         setMemberPickerVisible(false);
+        setTimeout(() => setCheckInToast(null), 3500);
         return;
       }
 
       AttendanceRepository.markAttendance(member.id, 'biometric');
+      NotificationService.add({
+        category: 'attendance',
+        title: 'Attendance Check-In',
+        message: `${member.full_name} (${member.member_number}) checked in via Biometric Scanner`,
+      });
+
       setMemberPickerVisible(false);
       loadData();
-      Alert.alert('Attendance Marked ✓', `${member.full_name} checked in successfully!`);
+      setCheckInToast(`${member.full_name} checked in successfully! ✓`);
+      setTimeout(() => setCheckInToast(null), 3500);
     } catch (e: any) {
-      Alert.alert('Notice', e?.message ?? 'Could not record attendance');
+      setCheckInToast(e?.message ?? 'Could not record attendance');
+      setTimeout(() => setCheckInToast(null), 3500);
     }
   };
 
@@ -139,6 +152,13 @@ export default function AttendanceScreen() {
           <View style={styles.devicePulseDot} />
         </TouchableOpacity>
       </View>
+
+      {checkInToast && (
+        <View style={{ backgroundColor: '#10B981', paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <CheckCircleIcon size={16} color="#FFFFFF" />
+          <Text style={{ fontFamily: Fonts.bold, fontSize: 13, color: '#FFFFFF', flex: 1 }}>{checkInToast}</Text>
+        </View>
+      )}
 
       <ScrollView
         contentContainerStyle={styles.content}

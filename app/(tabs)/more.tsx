@@ -109,7 +109,7 @@ export default function SettingsScreen() {
           {/* Notification Settings */}
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => router.push('/notifications' as any)}
+            onPress={() => router.push('/settings/notifications' as any)}
             activeOpacity={0.7}
           >
             <View style={styles.menuLeft}>

@@ -229,14 +229,25 @@ class WebDatabase {
     }
 
     // 7. payments mark paid
-    if (cleanSql.includes("UPDATE payments SET payment_status='paid'")) {
+    if (cleanSql.toUpperCase().includes("UPDATE PAYMENTS SET PAYMENT_STATUS='PAID'")) {
       const [paid_at, method, now, paymentId] = params;
       const target = this.payments.find(p => p.id === paymentId);
       if (target) {
         target.payment_status = 'paid';
         target.paid_at = paid_at;
         target.payment_method = method;
-        target.updated_at = now;
+        target.updated_at = now ?? new Date().toISOString();
+
+        // Also ensure member's next due date is advanced
+        const member = this.members.find(m => m.id === target.member_id);
+        if (member) {
+          const plan = this.plans.find(p => p.id === member.plan_id);
+          const duration = plan?.duration_days ?? 30;
+          const nextDate = new Date();
+          nextDate.setDate(nextDate.getDate() + duration);
+          member.next_due_date = nextDate.toISOString().split('T')[0];
+          member.updated_at = now ?? new Date().toISOString();
+        }
       }
       return;
     }
@@ -333,7 +344,7 @@ class WebDatabase {
     }
 
     // 6. single member getById
-    if (cleanSql.includes('FROM members m') && cleanSql.includes('WHERE m.id = ?')) {
+    if (cleanSql.includes('FROM members') && (cleanSql.includes('id = ?') || cleanSql.includes('id=?'))) {
       const [id] = params;
       const m = this.members.find(mem => mem.id === id);
       if (!m) return null;
@@ -348,8 +359,22 @@ class WebDatabase {
       };
     }
 
-    // 7. single attendance getById
-    if (cleanSql.includes('FROM attendance a') && cleanSql.includes('WHERE a.id = ?')) {
+    // 7. single payment getById
+    if (cleanSql.includes('FROM payments') && (cleanSql.includes('id = ?') || cleanSql.includes('id=?'))) {
+      const [id] = params;
+      const p = this.payments.find(pay => pay.id === id);
+      if (!p) return null;
+      const m = this.members.find(mem => mem.id === p.member_id);
+      return {
+        ...p,
+        member_name: m?.full_name ?? 'Member',
+        member_number: m?.member_number ?? '#G000',
+        photo_uri: m?.photo_uri ?? null,
+      };
+    }
+
+    // 8. single attendance getById
+    if (cleanSql.includes('FROM attendance') && (cleanSql.includes('id = ?') || cleanSql.includes('id=?'))) {
       const [id] = params;
       const a = this.attendance.find(att => att.id === id);
       if (!a) return null;

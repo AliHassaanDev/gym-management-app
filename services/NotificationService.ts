@@ -1,83 +1,153 @@
-import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
-import { MemberRepository } from '../db/repositories/MemberRepository';
-import { PaymentRepository } from '../db/repositories/PaymentRepository';
+import 'react-native-get-random-values';
+import { v4 as uuidv4 } from 'uuid';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-    priority: Notifications.AndroidNotificationPriority.HIGH,
-  }),
-});
+export interface AppNotification {
+  id: string;
+  category: 'payment' | 'attendance' | 'system' | 'member';
+  title: string;
+  message: string;
+  created_at: string;
+  read: boolean;
+}
 
-export const NotificationService = {
-  requestPermissions: async (): Promise<boolean> => {
-    try {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      return finalStatus === 'granted';
-    } catch (e) {
-      console.warn('Failed to get notification permissions:', e);
-      return false;
-    }
+const STORAGE_KEY = 'gym_paglu_dynamic_notifications';
+
+const INITIAL_NOTIFICATIONS: AppNotification[] = [
+  {
+    id: 'seed-1',
+    category: 'payment',
+    title: 'Payment Received',
+    message: 'Hassan Ahmed paid PKR 3,000 via Cash',
+    created_at: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
+    read: false,
   },
+  {
+    id: 'seed-2',
+    category: 'payment',
+    title: 'Overdue Fee Notice',
+    message: 'Usman Tariq is 2 days overdue (PKR 3,000)',
+    created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    read: false,
+  },
+  {
+    id: 'seed-3',
+    category: 'member',
+    title: 'New Member Enrolled',
+    message: 'Sana Khan joined Monthly Standard Plan',
+    created_at: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+    read: true,
+  },
+  {
+    id: 'seed-4',
+    category: 'attendance',
+    title: 'Attendance Check-In',
+    message: 'Ali Raza checked in via Biometric Scanner',
+    created_at: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
+    read: true,
+  },
+  {
+    id: 'seed-5',
+    category: 'payment',
+    title: 'Upcoming Fee Reminder',
+    message: 'Upcoming dues detected for enrolled gym members',
+    created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    read: true,
+  },
+  {
+    id: 'seed-6',
+    category: 'system',
+    title: 'Biometric System Connected',
+    message: 'ZK-Teco device synced successfully on LAN',
+    created_at: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+    read: true,
+  },
+];
 
-  scheduleDuePaymentReminders: async (): Promise<number> => {
-    try {
-      const granted = await NotificationService.requestPermissions();
-      if (!granted) return 0;
+class NotificationServiceManager {
+  private inMemoryList: AppNotification[] = [];
 
-      // Find members with fees due soon (within 3 days)
-      const duePayments = PaymentRepository.getByStatus('due');
-      let scheduledCount = 0;
+  constructor() {
+    this.load();
+  }
 
-      for (const payment of duePayments) {
-        if (!payment.due_date) continue;
-        const dueDate = new Date(payment.due_date);
-        const now = new Date();
-        const diffTime = dueDate.getTime() - now.getTime();
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        if (diffDays >= 0 && diffDays <= 3) {
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title: 'Fee Reminder 🔔',
-              body: `${payment.member_name ?? 'Member'} fee of PKR ${payment.amount.toLocaleString()} is due in ${diffDays === 0 ? 'today' : `${diffDays} days`}!`,
-              data: { memberId: payment.member_id, paymentId: payment.id },
-            },
-            trigger: null, // send immediately or trigger at scheduled time
-          });
-          scheduledCount++;
+  private load(): void {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          this.inMemoryList = JSON.parse(raw);
+          return;
         }
+      } catch (e) {
+        console.warn('[NotificationService] Load error:', e);
       }
-
-      return scheduledCount;
-    } catch (e) {
-      console.warn('Error scheduling reminders:', e);
-      return 0;
     }
-  },
+    this.inMemoryList = [...INITIAL_NOTIFICATIONS];
+    this.persist();
+  }
 
-  sendImmediateNotification: async (title: string, body: string) => {
-    try {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title,
-          body,
-          sound: true,
-        },
-        trigger: null,
-      });
-    } catch (e) {
-      console.warn('Error sending notification:', e);
+  private persist(): void {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(this.inMemoryList));
+      } catch (e) {
+        console.warn('[NotificationService] Persist error:', e);
+      }
     }
-  },
-};
+  }
+
+  getAll(): AppNotification[] {
+    this.load();
+    return [...this.inMemoryList].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }
+
+  add(item: {
+    category: 'payment' | 'attendance' | 'system' | 'member';
+    title: string;
+    message: string;
+  }): AppNotification {
+    this.load();
+    const newNotif: AppNotification = {
+      id: uuidv4(),
+      category: item.category,
+      title: item.title,
+      message: item.message,
+      created_at: new Date().toISOString(),
+      read: false,
+    };
+    this.inMemoryList.unshift(newNotif);
+    this.persist();
+    return newNotif;
+  }
+
+  markAsRead(id: string): void {
+    this.load();
+    const target = this.inMemoryList.find(n => n.id === id);
+    if (target) {
+      target.read = true;
+      this.persist();
+    }
+  }
+
+  markAllAsRead(): void {
+    this.load();
+    this.inMemoryList.forEach(n => {
+      n.read = true;
+    });
+    this.persist();
+  }
+
+  clearAll(): void {
+    this.inMemoryList = [];
+    this.persist();
+  }
+
+  getUnreadCount(): number {
+    this.load();
+    return this.inMemoryList.filter(n => !n.read).length;
+  }
+}
+
+export const NotificationService = new NotificationServiceManager();

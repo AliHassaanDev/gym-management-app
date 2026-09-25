@@ -17,6 +17,7 @@ import { MemberRepository } from '../../db/repositories/MemberRepository';
 import { PaymentRepository } from '../../db/repositories/PaymentRepository';
 import { PlanRepository, Plan } from '../../db/repositories/PlanRepository';
 import { AppModal } from '../../components/ui/AppModal';
+import { NotificationService } from '../../services/NotificationService';
 import {
   ChevronLeftIcon,
   ChevronDownIcon,
@@ -156,7 +157,27 @@ export default function AddMemberScreen() {
           });
         }
 
-        // 3. Show in-frame success modal
+        // 3. Trigger live dynamic notifications
+        NotificationService.add({
+          category: 'member',
+          title: 'New Member Enrolled',
+          message: `${member.full_name} (${member.member_number}) registered on ${selectedPlan.name}`,
+        });
+        if (paymentOption === 'paid') {
+          NotificationService.add({
+            category: 'payment',
+            title: 'Payment Received',
+            message: `Received PKR ${selectedPlan.price.toLocaleString()} from ${member.full_name} on enrollment`,
+          });
+        } else {
+          NotificationService.add({
+            category: 'payment',
+            title: 'Fee Due Registered',
+            message: `${member.full_name} enrolled with fee PKR ${selectedPlan.price.toLocaleString()} due`,
+          });
+        }
+
+        // 4. Show in-frame success modal
         setCreatedMember({
           id: member.id,
           name: member.full_name,

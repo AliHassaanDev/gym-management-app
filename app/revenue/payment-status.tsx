@@ -18,6 +18,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge';
 import { getMemberAvatar } from '../../constants/mockAvatars';
 import { formatPKR } from '../../utils/helpers';
 import { AppModal } from '../../components/ui/AppModal';
+import { NotificationService } from '../../services/NotificationService';
 
 type StatusTab = 'paid' | 'due' | 'overdue';
 
@@ -79,6 +80,14 @@ export default function PaymentStatusScreen() {
     PaymentRepository.markPaid(selectedPaymentForPay.id, payMethod);
     const paidMemberName = selectedPaymentForPay.member_name ?? 'Member';
     const paidAmt = selectedPaymentForPay.amount;
+    const methodLabel = payMethod === 'cash' ? 'Cash' : 'Bank Transfer';
+
+    NotificationService.add({
+      category: 'payment',
+      title: 'Payment Received',
+      message: `Received PKR ${paidAmt.toLocaleString()} from ${paidMemberName} via ${methodLabel}`,
+    });
+
     setSelectedPaymentForPay(null);
     loadData();
     setSuccessToast(`Received PKR ${paidAmt.toLocaleString()} from ${paidMemberName}! ✓`);

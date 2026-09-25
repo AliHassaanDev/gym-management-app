@@ -1,14 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Switch,
-  Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Fonts, Radius, Shadow } from '../constants/theme';
 import {
@@ -19,157 +17,102 @@ import {
   BellIcon,
   SmartphoneIcon,
   WalletIcon,
-  ClockIcon,
+  SlidersIcon,
 } from '../components/ui/Icons';
-import { getDB } from '../db/database';
-
-interface NotificationItem {
-  id: string;
-  category: 'payment' | 'attendance' | 'system' | 'member';
-  icon: any;
-  iconBg: string;
-  title: string;
-  message: string;
-  time: string;
-  read: boolean;
-}
-
-const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: '1',
-    category: 'payment',
-    icon: <WalletIcon size={18} color="#16A34A" />,
-    iconBg: '#DCFCE7',
-    title: 'Payment Received',
-    message: 'Hassan Ahmed paid PKR 3,000 via Cash',
-    time: '25m ago',
-    read: false,
-  },
-  {
-    id: '2',
-    category: 'payment',
-    icon: <AlertCircleIcon size={18} color="#DC2626" />,
-    iconBg: '#FEE2E2',
-    title: 'Overdue Fee Notice',
-    message: 'Usman Tariq is 2 days overdue (PKR 3,000)',
-    time: '2h ago',
-    read: false,
-  },
-  {
-    id: '3',
-    category: 'member',
-    icon: <UserPlusIcon size={18} color="#2563EB" />,
-    iconBg: '#DBEAFE',
-    title: 'New Member Enrolled',
-    message: 'Sana Khan joined Monthly Standard Plan',
-    time: '4h ago',
-    read: true,
-  },
-  {
-    id: '4',
-    category: 'attendance',
-    icon: <CheckCircleIcon size={18} color="#16A34A" />,
-    iconBg: '#DCFCE7',
-    title: 'Attendance Check-In',
-    message: 'Ali Raza checked in via Biometric Scanner',
-    time: '6h ago',
-    read: true,
-  },
-  {
-    id: '5',
-    category: 'payment',
-    icon: <BellIcon size={18} color="#D97706" />,
-    iconBg: '#FEF3C7',
-    title: 'Upcoming Fee Reminder',
-    message: '3 members have fees due within next 48 hours',
-    time: '1d ago',
-    read: true,
-  },
-  {
-    id: '6',
-    category: 'system',
-    icon: <SmartphoneIcon size={18} color="#0284C7" />,
-    iconBg: '#E0F2FE',
-    title: 'Biometric System Connected',
-    message: 'ZK-Teco device synced successfully on LAN',
-    time: '2d ago',
-    read: true,
-  },
-];
+import { NotificationService, AppNotification } from '../services/NotificationService';
 
 export default function NotificationsScreen() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'settings' | 'alerts'>('settings');
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [filter, setFilter] = useState<'all' | 'payment' | 'attendance' | 'member' | 'system'>('all');
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  // Toggle settings
-  const [dueReminders, setDueReminders] = useState(true);
-  const [overdueAlerts, setOverdueAlerts] = useState(true);
-  const [paymentReceipts, setPaymentReceipts] = useState(true);
-  const [checkinAlerts, setCheckinAlerts] = useState(false);
-  const [dailySummary, setDailySummary] = useState(true);
-  const [whatsappAlerts, setWhatsappAlerts] = useState(true);
-  const [smsGateway, setSmsGateway] = useState(false);
-  const [soundVibration, setSoundVibration] = useState(true);
-
-  // Filter state for alerts
-  const [alertFilter, setAlertFilter] = useState<'all' | 'payment' | 'attendance' | 'system'>('all');
-  const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
-  const [savedBanner, setSavedBanner] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Load persisted settings if available
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const stored = window.localStorage.getItem('gym_paglu_notif_settings');
-        if (stored) {
-          const cfg = JSON.parse(stored);
-          if (cfg.dueReminders !== undefined) setDueReminders(cfg.dueReminders);
-          if (cfg.overdueAlerts !== undefined) setOverdueAlerts(cfg.overdueAlerts);
-          if (cfg.paymentReceipts !== undefined) setPaymentReceipts(cfg.paymentReceipts);
-          if (cfg.checkinAlerts !== undefined) setCheckinAlerts(cfg.checkinAlerts);
-          if (cfg.dailySummary !== undefined) setDailySummary(cfg.dailySummary);
-          if (cfg.whatsappAlerts !== undefined) setWhatsappAlerts(cfg.whatsappAlerts);
-          if (cfg.smsGateway !== undefined) setSmsGateway(cfg.smsGateway);
-          if (cfg.soundVibration !== undefined) setSoundVibration(cfg.soundVibration);
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to load notification settings', e);
-    }
+  const loadNotifications = useCallback(() => {
+    const list = NotificationService.getAll();
+    setNotifications(list);
   }, []);
 
-  const savePreferences = (updated: Record<string, boolean>) => {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const current = {
-          dueReminders,
-          overdueAlerts,
-          paymentReceipts,
-          checkinAlerts,
-          dailySummary,
-          whatsappAlerts,
-          smsGateway,
-          soundVibration,
-          ...updated,
-        };
-        window.localStorage.setItem('gym_paglu_notif_settings', JSON.stringify(current));
-        setSavedBanner('Settings saved');
-        setTimeout(() => setSavedBanner(null), 2500);
-      }
-    } catch (e) {
-      console.warn('Failed to save notification settings', e);
+  useFocusEffect(
+    useCallback(() => {
+      loadNotifications();
+    }, [loadNotifications])
+  );
+
+  const handleMarkAllRead = () => {
+    NotificationService.markAllAsRead();
+    loadNotifications();
+    setToastMsg('All notifications marked as read');
+    setTimeout(() => setToastMsg(null), 2500);
+  };
+
+  const handleItemPress = (notif: AppNotification) => {
+    if (!notif.read) {
+      NotificationService.markAsRead(notif.id);
+      loadNotifications();
     }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    setSavedBanner('All notifications marked as read');
-    setTimeout(() => setSavedBanner(null), 2500);
+  const formatRelativeTime = (isoString: string): string => {
+    try {
+      const now = Date.now();
+      const past = new Date(isoString).getTime();
+      const diffSec = Math.floor((now - past) / 1000);
+
+      if (diffSec < 60) return 'Just now';
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) return `${diffMin}m ago`;
+      const diffHours = Math.floor(diffMin / 60);
+      if (diffHours < 24) return `${diffHours}h ago`;
+      const diffDays = Math.floor(diffHours / 24);
+      if (diffDays === 1) return 'Yesterday';
+      if (diffDays < 7) return `${diffDays}d ago`;
+      return new Date(isoString).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    } catch {
+      return 'Recent';
+    }
   };
 
-  const filteredNotifs = notifications.filter(n => {
-    if (alertFilter === 'all') return true;
-    return n.category === alertFilter;
+  const getCategoryConfig = (category: AppNotification['category']) => {
+    switch (category) {
+      case 'payment':
+        return {
+          icon: <WalletIcon size={18} color="#16A34A" />,
+          bg: '#DCFCE7',
+          tag: 'Fee',
+          tagColor: '#166534',
+          tagBg: '#F0FDF4',
+        };
+      case 'attendance':
+        return {
+          icon: <CheckCircleIcon size={18} color="#2563EB" />,
+          bg: '#DBEAFE',
+          tag: 'Attendance',
+          tagColor: '#1E40AF',
+          tagBg: '#EFF6FF',
+        };
+      case 'member':
+        return {
+          icon: <UserPlusIcon size={18} color="#D97706" />,
+          bg: '#FEF3C7',
+          tag: 'Member',
+          tagColor: '#92400E',
+          tagBg: '#FFFBEB',
+        };
+      case 'system':
+      default:
+        return {
+          icon: <SmartphoneIcon size={18} color="#0284C7" />,
+          bg: '#E0F2FE',
+          tag: 'System',
+          tagColor: '#075985',
+          tagBg: '#F0F9FF',
+        };
+    }
+  };
+
+  const filtered = notifications.filter(n => {
+    if (filter === 'all') return true;
+    return n.category === filter;
   });
 
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -181,295 +124,124 @@ export default function NotificationsScreen() {
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
           <ChevronLeftIcon size={20} color="#0F172A" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notification Settings</Text>
-        <View style={{ width: 36 }} />
-      </View>
-
-      {/* Segmented Switch: Settings vs Recent Alerts */}
-      <View style={styles.tabContainer}>
+        <View style={styles.titleWrap}>
+          <Text style={styles.headerTitle}>Notifications</Text>
+          {unreadCount > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>{unreadCount} new</Text>
+            </View>
+          )}
+        </View>
         <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'settings' && styles.activeTabButton]}
-          onPress={() => setActiveTab('settings')}
-          activeOpacity={0.8}
+          style={styles.settingsBtn}
+          onPress={() => router.push('/settings/notifications' as any)}
+          activeOpacity={0.7}
         >
-          <Text style={[styles.tabButtonText, activeTab === 'settings' && styles.activeTabButtonText]}>
-            Preferences
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'alerts' && styles.activeTabButton]}
-          onPress={() => setActiveTab('alerts')}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.tabButtonText, activeTab === 'alerts' && styles.activeTabButtonText]}>
-            Recent Alerts {unreadCount > 0 && `(${unreadCount})`}
-          </Text>
+          <SlidersIcon size={18} color="#64748B" />
         </TouchableOpacity>
       </View>
 
-      {/* Success Notification Banner */}
-      {savedBanner && (
+      {/* Toast Feedback Banner */}
+      {toastMsg && (
         <View style={styles.toastBanner}>
           <CheckCircleIcon size={16} color="#16A34A" />
-          <Text style={styles.toastText}>{savedBanner}</Text>
+          <Text style={styles.toastText}>{toastMsg}</Text>
         </View>
       )}
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {activeTab === 'settings' ? (
-          <>
-            {/* Payment & Fee Alerts Section */}
-            <View style={styles.sectionHeader}>
-              <WalletIcon size={18} color="#0F172A" />
-              <Text style={styles.sectionTitle}>Payment & Fee Notifications</Text>
-            </View>
-
-            <View style={styles.card}>
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingTitle}>Due Payment Reminders</Text>
-                  <Text style={styles.settingDesc}>
-                    Alert owner 2 days before a member fee is due
-                  </Text>
-                </View>
-                <Switch
-                  value={dueReminders}
-                  onValueChange={val => {
-                    setDueReminders(val);
-                    savePreferences({ dueReminders: val });
-                  }}
-                  trackColor={{ false: '#E2E8F0', true: '#FDE68A' }}
-                  thumbColor={dueReminders ? '#F59E0B' : '#94A3B8'}
-                />
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingTitle}>Overdue Payment Alerts</Text>
-                  <Text style={styles.settingDesc}>
-                    Urgent notification when member payments become overdue
-                  </Text>
-                </View>
-                <Switch
-                  value={overdueAlerts}
-                  onValueChange={val => {
-                    setOverdueAlerts(val);
-                    savePreferences({ overdueAlerts: val });
-                  }}
-                  trackColor={{ false: '#E2E8F0', true: '#FDE68A' }}
-                  thumbColor={overdueAlerts ? '#F59E0B' : '#94A3B8'}
-                />
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingTitle}>Auto Payment Receipts</Text>
-                  <Text style={styles.settingDesc}>
-                    Generate digital confirmation when fee is settled
-                  </Text>
-                </View>
-                <Switch
-                  value={paymentReceipts}
-                  onValueChange={val => {
-                    setPaymentReceipts(val);
-                    savePreferences({ paymentReceipts: val });
-                  }}
-                  trackColor={{ false: '#E2E8F0', true: '#FDE68A' }}
-                  thumbColor={paymentReceipts ? '#F59E0B' : '#94A3B8'}
-                />
-              </View>
-            </View>
-
-            {/* Attendance & Activity */}
-            <View style={[styles.sectionHeader, { marginTop: 20 }]}>
-              <ClockIcon size={18} color="#0F172A" />
-              <Text style={styles.sectionTitle}>Attendance & Check-Ins</Text>
-            </View>
-
-            <View style={styles.card}>
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingTitle}>Check-In Push Alerts</Text>
-                  <Text style={styles.settingDesc}>
-                    Show real-time alert on owner screen when member scans in
-                  </Text>
-                </View>
-                <Switch
-                  value={checkinAlerts}
-                  onValueChange={val => {
-                    setCheckinAlerts(val);
-                    savePreferences({ checkinAlerts: val });
-                  }}
-                  trackColor={{ false: '#E2E8F0', true: '#FDE68A' }}
-                  thumbColor={checkinAlerts ? '#F59E0B' : '#94A3B8'}
-                />
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingTitle}>Daily Attendance Summary</Text>
-                  <Text style={styles.settingDesc}>
-                    Daily closing briefing at 10:00 PM with headcounts
-                  </Text>
-                </View>
-                <Switch
-                  value={dailySummary}
-                  onValueChange={val => {
-                    setDailySummary(val);
-                    savePreferences({ dailySummary: val });
-                  }}
-                  trackColor={{ false: '#E2E8F0', true: '#FDE68A' }}
-                  thumbColor={dailySummary ? '#F59E0B' : '#94A3B8'}
-                />
-              </View>
-            </View>
-
-            {/* Channels & Delivery */}
-            <View style={[styles.sectionHeader, { marginTop: 20 }]}>
-              <SmartphoneIcon size={18} color="#0F172A" />
-              <Text style={styles.sectionTitle}>Delivery Channels</Text>
-            </View>
-
-            <View style={styles.card}>
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingTitle}>WhatsApp Automated Alerts</Text>
-                  <Text style={styles.settingDesc}>
-                    Send fee reminders directly to member's WhatsApp
-                  </Text>
-                </View>
-                <Switch
-                  value={whatsappAlerts}
-                  onValueChange={val => {
-                    setWhatsappAlerts(val);
-                    savePreferences({ whatsappAlerts: val });
-                  }}
-                  trackColor={{ false: '#E2E8F0', true: '#FDE68A' }}
-                  thumbColor={whatsappAlerts ? '#F59E0B' : '#94A3B8'}
-                />
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingTitle}>SMS Gateway Backup</Text>
-                  <Text style={styles.settingDesc}>
-                    Send cellular SMS if WhatsApp delivery is unavailable
-                  </Text>
-                </View>
-                <Switch
-                  value={smsGateway}
-                  onValueChange={val => {
-                    setSmsGateway(val);
-                    savePreferences({ smsGateway: val });
-                  }}
-                  trackColor={{ false: '#E2E8F0', true: '#FDE68A' }}
-                  thumbColor={smsGateway ? '#F59E0B' : '#94A3B8'}
-                />
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingTitle}>Sound & In-App Haptics</Text>
-                  <Text style={styles.settingDesc}>
-                    Play chime on successful member check-in & fee settlement
-                  </Text>
-                </View>
-                <Switch
-                  value={soundVibration}
-                  onValueChange={val => {
-                    setSoundVibration(val);
-                    savePreferences({ soundVibration: val });
-                  }}
-                  trackColor={{ false: '#E2E8F0', true: '#FDE68A' }}
-                  thumbColor={soundVibration ? '#F59E0B' : '#94A3B8'}
-                />
-              </View>
-            </View>
-          </>
-        ) : (
-          <>
-            {/* Filter Pills */}
-            <View style={styles.filterRow}>
-              {(['all', 'payment', 'attendance', 'system'] as const).map(tab => (
-                <TouchableOpacity
-                  key={tab}
-                  style={[styles.filterChip, alertFilter === tab && styles.filterChipActive]}
-                  onPress={() => setAlertFilter(tab)}
-                  activeOpacity={0.8}
-                >
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      alertFilter === tab && styles.filterChipTextActive,
-                    ]}
-                  >
-                    {tab === 'all'
-                      ? 'All Alerts'
-                      : tab.charAt(0).toUpperCase() + tab.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Action Bar */}
-            <View style={styles.alertActionBar}>
-              <Text style={styles.alertCountText}>
-                Showing {filteredNotifs.length} notifications
+      {/* Category Filter Pills */}
+      <View style={styles.filterRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+          {(['all', 'payment', 'attendance', 'member', 'system'] as const).map(tab => (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.filterChip, filter === tab && styles.filterChipActive]}
+              onPress={() => setFilter(tab)}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  filter === tab && styles.filterChipTextActive,
+                ]}
+              >
+                {tab === 'all'
+                  ? 'All Alerts'
+                  : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </Text>
-              {unreadCount > 0 && (
-                <TouchableOpacity onPress={markAllAsRead} activeOpacity={0.7}>
-                  <Text style={styles.markReadText}>Mark all as read</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
-            {/* List */}
-            <View style={styles.listCard}>
-              {filteredNotifs.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                  <BellIcon size={32} color="#CBD5E1" />
-                  <Text style={styles.emptyText}>No alerts found for this category</Text>
-                </View>
-              ) : (
-                filteredNotifs.map((item, index) => (
-                  <View
-                    key={item.id}
-                    style={[
-                      styles.notifItem,
-                      !item.read && styles.unreadNotifItem,
-                      index === filteredNotifs.length - 1 && { borderBottomWidth: 0 },
-                    ]}
-                  >
-                    <View style={[styles.iconCircle, { backgroundColor: item.iconBg }]}>
-                      {item.icon}
+      {/* Sub-header with quick actions */}
+      <View style={styles.subHeader}>
+        <Text style={styles.alertCountText}>
+          {filtered.length} notification{filtered.length === 1 ? '' : 's'}
+        </Text>
+        {unreadCount > 0 && (
+          <TouchableOpacity onPress={handleMarkAllRead} activeOpacity={0.7}>
+            <Text style={styles.markReadText}>Mark all as read</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Notifications List */}
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {filtered.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconCircle}>
+              <BellIcon size={32} color="#CBD5E1" />
+            </View>
+            <Text style={styles.emptyTitle}>No notifications yet</Text>
+            <Text style={styles.emptySub}>
+              Notifications regarding member enrollments, fee dues, payments, and check-ins will appear here.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.listCard}>
+            {filtered.map((item, index) => {
+              const cfg = getCategoryConfig(item.category);
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[
+                    styles.notifItem,
+                    !item.read && styles.unreadNotifItem,
+                    index === filtered.length - 1 && { borderBottomWidth: 0 },
+                  ]}
+                  onPress={() => handleItemPress(item)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.iconCircle, { backgroundColor: cfg.bg }]}>
+                    {cfg.icon}
+                  </View>
+
+                  <View style={styles.infoCol}>
+                    <View style={styles.topRow}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, marginRight: 8 }}>
+                        <Text style={[styles.titleText, !item.read && styles.unreadTitleText]} numberOfLines={1}>
+                          {item.title}
+                        </Text>
+                        {!item.read && <View style={styles.unreadDot} />}
+                      </View>
+                      <Text style={styles.timeText}>{formatRelativeTime(item.created_at)}</Text>
                     </View>
 
-                    <View style={styles.infoCol}>
-                      <View style={styles.topRow}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <Text style={styles.titleText}>{item.title}</Text>
-                          {!item.read && <View style={styles.unreadDot} />}
-                        </View>
-                        <Text style={styles.timeText}>{item.time}</Text>
+                    <Text style={styles.messageText}>{item.message}</Text>
+
+                    <View style={styles.bottomMeta}>
+                      <View style={[styles.categoryTag, { backgroundColor: cfg.tagBg }]}>
+                        <Text style={[styles.categoryTagText, { color: cfg.tagColor }]}>
+                          {cfg.tag}
+                        </Text>
                       </View>
-                      <Text style={styles.messageText}>{item.message}</Text>
                     </View>
                   </View>
-                ))
-              )}
-            </View>
-          </>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -499,39 +271,36 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
+  titleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   headerTitle: {
     fontFamily: Fonts.bold,
     fontSize: 18,
     color: '#0F172A',
   },
-
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    gap: 8,
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
+  unreadBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: Radius.full,
-    backgroundColor: '#F1F5F9',
   },
-  activeTabButton: {
-    backgroundColor: '#0F172A',
-  },
-  tabButtonText: {
-    fontFamily: Fonts.medium,
-    fontSize: 13,
-    color: '#64748B',
-  },
-  activeTabButtonText: {
-    color: '#FFFFFF',
+  unreadBadgeText: {
     fontFamily: Fonts.bold,
+    fontSize: 11,
+    color: '#D97706',
+  },
+  settingsBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
 
   toastBanner: {
@@ -550,73 +319,24 @@ const styles = StyleSheet.create({
     color: '#166534',
   },
 
-  content: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    fontFamily: Fonts.bold,
-    fontSize: 14,
-    color: '#0F172A',
-  },
-
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: Radius.lg,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    ...Shadow.sm,
-  },
-  settingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-  },
-  settingInfo: {
-    flex: 1,
-    paddingRight: 12,
-  },
-  settingTitle: {
-    fontFamily: Fonts.semiBold,
-    fontSize: 14,
-    color: '#0F172A',
-  },
-  settingDesc: {
-    fontFamily: Fonts.regular,
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
-    lineHeight: 16,
-  },
-  settingDivider: {
-    height: 1,
-    backgroundColor: '#F8FAFC',
-  },
-
   filterRow: {
-    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  filterScroll: {
+    paddingHorizontal: 16,
     gap: 8,
-    marginBottom: 14,
   },
   filterChip: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: Radius.full,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    backgroundColor: '#F1F5F9',
   },
   filterChipActive: {
     backgroundColor: '#F59E0B',
-    borderColor: '#F59E0B',
   },
   filterChipText: {
     fontFamily: Fonts.medium,
@@ -628,15 +348,15 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bold,
   },
 
-  alertActionBar: {
+  subHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
-    paddingHorizontal: 2,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
   alertCountText: {
-    fontFamily: Fonts.regular,
+    fontFamily: Fonts.medium,
     fontSize: 12,
     color: '#94A3B8',
   },
@@ -646,6 +366,10 @@ const styles = StyleSheet.create({
     color: '#2563EB',
   },
 
+  content: {
+    paddingHorizontal: 16,
+    paddingBottom: 40,
+  },
   listCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: Radius.lg,
@@ -662,7 +386,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F8FAFC',
   },
   unreadNotifItem: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFDF7',
   },
   iconCircle: {
     width: 38,
@@ -677,18 +401,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 3,
+    marginBottom: 4,
   },
   titleText: {
     fontFamily: Fonts.semiBold,
     fontSize: 14,
+    color: '#334155',
+  },
+  unreadTitleText: {
+    fontFamily: Fonts.bold,
     color: '#0F172A',
   },
   unreadDot: {
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: '#2563EB',
+    backgroundColor: '#F59E0B',
   },
   timeText: {
     fontFamily: Fonts.regular,
@@ -697,18 +425,57 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontFamily: Fonts.regular,
-    fontSize: 12,
-    color: '#64748B',
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 18,
+    marginBottom: 8,
   },
+  bottomMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  categoryTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: Radius.sm,
+  },
+  categoryTagText: {
+    fontFamily: Fonts.medium,
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
   emptyContainer: {
-    padding: 36,
+    padding: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    marginTop: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
   },
-  emptyText: {
-    fontFamily: Fonts.medium,
+  emptyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontFamily: Fonts.bold,
+    fontSize: 16,
+    color: '#0F172A',
+    marginBottom: 6,
+  },
+  emptySub: {
+    fontFamily: Fonts.regular,
     fontSize: 13,
     color: '#94A3B8',
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });
