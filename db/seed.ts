@@ -7,12 +7,34 @@ import { addDays } from '../utils/helpers';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 
-const SEED_KEY = 'seed_v1';
+const SEED_KEY = 'seed_v2';
 
 export const seedDatabase = async (): Promise<void> => {
   const db = getDB();
   const already = db.getFirstSync(`SELECT value FROM gym_settings WHERE key=?`, [SEED_KEY]) as { value: string } | null;
   if (already) return;
+
+  // Clean slate reset on seed upgrade
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.removeItem('gym_paglu_plans');
+      window.localStorage.removeItem('gym_paglu_members');
+      window.localStorage.removeItem('gym_paglu_payments');
+      window.localStorage.removeItem('gym_paglu_attendance');
+      window.localStorage.removeItem('gym_paglu_settings');
+      if ((db as any).members) (db as any).members = [];
+      if ((db as any).plans) (db as any).plans = [];
+      if ((db as any).payments) (db as any).payments = [];
+      if ((db as any).attendance) (db as any).attendance = [];
+      if ((db as any).gym_settings) (db as any).gym_settings = {};
+    } catch (_) {}
+  }
+  try {
+    db.runSync(`DELETE FROM attendance`);
+    db.runSync(`DELETE FROM payments`);
+    db.runSync(`DELETE FROM members`);
+    db.runSync(`DELETE FROM plans`);
+  } catch (_) {}
 
   const now = new Date().toISOString();
 
@@ -48,6 +70,14 @@ export const seedDatabase = async (): Promise<void> => {
     { full_name: 'Tariq Mehmood', phone: '+923001234579', age: 35, gender: 'male',   plan: 'Monthly Membership',   joinDaysAgo: 10,  dueDaysFromNow: 18  },
     { full_name: 'Rabia Aziz',    phone: '+923001234580', age: 20, gender: 'female', plan: 'PT Monthly',           joinDaysAgo: 28,  dueDaysFromNow: 2   },
     { full_name: 'Imran Akhtar',  phone: '+923001234581', age: 33, gender: 'male',   plan: 'Quarterly Membership', joinDaysAgo: 90,  dueDaysFromNow: -8  },
+    // 3 New Members with DUE payment:
+    { full_name: 'Hamza Farooq',  phone: '+923001234582', age: 24, gender: 'male',   plan: 'Monthly Membership',   joinDaysAgo: 27,  dueDaysFromNow: 3   },
+    { full_name: 'Mahnoor Javed', phone: '+923001234583', age: 22, gender: 'female', plan: 'PT Monthly',           joinDaysAgo: 26,  dueDaysFromNow: 4   },
+    { full_name: 'Danish Rehman', phone: '+923001234584', age: 29, gender: 'male',   plan: 'Quarterly Membership', joinDaysAgo: 85,  dueDaysFromNow: 5   },
+    // 3 New Members with OVERDUE payment:
+    { full_name: 'Omer Siddiqui', phone: '+923001234585', age: 30, gender: 'male',   plan: 'Monthly Membership',   joinDaysAgo: 34,  dueDaysFromNow: -4  },
+    { full_name: 'Komal Waqar',   phone: '+923001234586', age: 25, gender: 'female', plan: 'PT Monthly',           joinDaysAgo: 37,  dueDaysFromNow: -7  },
+    { full_name: 'Waleed Hashmi', phone: '+923001234587', age: 27, gender: 'male',   plan: 'Annual Membership',    joinDaysAgo: 380, dueDaysFromNow: -15 },
   ];
 
   const today = new Date();

@@ -276,7 +276,16 @@ class WebDatabase {
       return;
     }
 
-    // 10. general sync updates
+    // 10. delete operations
+    if (cleanSql.toUpperCase().startsWith('DELETE FROM')) {
+      if (cleanSql.includes('attendance')) this.attendance = [];
+      if (cleanSql.includes('payments')) this.payments = [];
+      if (cleanSql.includes('members')) this.members = [];
+      if (cleanSql.includes('plans')) this.plans = [];
+      return;
+    }
+
+    // 11. general sync updates
     if (cleanSql.includes("SET sync_status='synced'")) {
       if (cleanSql.includes('members')) this.members.forEach(m => (m.sync_status = 'synced'));
       if (cleanSql.includes('payments')) this.payments.forEach(p => (p.sync_status = 'synced'));
