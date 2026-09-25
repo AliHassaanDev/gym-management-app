@@ -39,6 +39,47 @@ export const PaymentRepository = {
     `) as Payment[];
   },
 
+  getCurrentStatusPerMember: (): Payment[] => {
+    const db = getDB();
+    const allPayments = PaymentRepository.getAll();
+    const members = db.getAllSync(`SELECT * FROM members WHERE status = 'active'`) as any[];
+
+    return members.map(m => {
+      const memberPayments = allPayments.filter(p => p.member_id === m.id);
+
+      // Overdue status takes priority
+      const overdue = memberPayments.find(p => p.payment_status === 'overdue');
+      if (overdue) return overdue;
+
+      // Due status second
+      const due = memberPayments.find(p => p.payment_status === 'due');
+      if (due) return due;
+
+      // Latest paid payment
+      const paid = memberPayments
+        .filter(p => p.payment_status === 'paid')
+        .sort((a, b) => new Date(b.due_date || 0).getTime() - new Date(a.due_date || 0).getTime())[0];
+
+      if (paid) return paid;
+
+      return {
+        id: `auto-${m.id}`,
+        member_id: m.id,
+        amount: 3000,
+        paid_at: null,
+        due_date: m.next_due_date,
+        payment_status: 'paid',
+        payment_method: 'cash',
+        notes: null,
+        sync_status: 'synced',
+        updated_at: m.updated_at,
+        member_name: m.full_name,
+        member_number: m.member_number,
+        photo_uri: m.photo_uri ?? undefined,
+      };
+    });
+  },
+
   getByStatus: (status: 'paid' | 'due' | 'overdue'): Payment[] => {
     const db = getDB();
     return db.getAllSync(`

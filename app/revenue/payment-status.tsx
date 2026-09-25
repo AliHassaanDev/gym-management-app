@@ -29,15 +29,15 @@ export default function PaymentStatusScreen() {
 
   const [activeTab, setActiveTab] = useState<StatusTab>(initialTab);
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [counts, setCounts] = useState({ paid: 102, due: 18, overdue: 8 });
+  const [counts, setCounts] = useState({ paid: 0, due: 0, overdue: 0 });
   const [refreshing, setRefreshing] = useState(false);
 
   const loadData = useCallback(() => {
     PaymentRepository.refreshOverdueStatuses();
-    const allPayments = PaymentRepository.getAll();
-    const paidList = allPayments.filter(p => p.payment_status === 'paid');
-    const dueList = allPayments.filter(p => p.payment_status === 'due');
-    const overdueList = allPayments.filter(p => p.payment_status === 'overdue');
+    const currentMemberPayments = PaymentRepository.getCurrentStatusPerMember();
+    const paidList = currentMemberPayments.filter(p => p.payment_status === 'paid');
+    const dueList = currentMemberPayments.filter(p => p.payment_status === 'due');
+    const overdueList = currentMemberPayments.filter(p => p.payment_status === 'overdue');
 
     setCounts({
       paid: paidList.length,
