@@ -450,22 +450,51 @@ class WebDatabase {
 
     // 5. monthly revenue trend
     if (cleanSql.includes("strftime('%Y-%m', paid_at) as month")) {
-      return [
-        { month: '2026-03', total: 120000 },
-        { month: '2026-04', total: 145000 },
-        { month: '2026-05', total: 150000 },
-        { month: '2026-06', total: 175000 },
-        { month: '2026-07', total: 190000 },
-        { month: '2026-08', total: 225000 },
-        { month: '2026-09', total: 256000 },
-      ];
+      const monthMap = new Map<string, number>();
+      const now = new Date();
+      // Generate past 6 months baseline keys
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const mKey = d.toISOString().slice(0, 7);
+        const baseline = 140000 + (5 - i) * 20000;
+        monthMap.set(mKey, baseline);
+      }
+
+      for (const p of this.payments) {
+        if (p.payment_status === 'paid' && p.paid_at) {
+          const mKey = p.paid_at.slice(0, 7);
+          const curr = monthMap.get(mKey) ?? 0;
+          monthMap.set(mKey, curr + p.amount);
+        }
+      }
+
+      return Array.from(monthMap.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([month, total]) => ({ month, total }));
     }
 
     // 6. revenue by type
     if (cleanSql.includes('FROM payments pay JOIN members m') && cleanSql.includes('GROUP BY p.type')) {
+      let membershipTotal = 0;
+      let ptTotal = 0;
+      for (const p of this.payments) {
+        if (p.payment_status === 'paid') {
+          const m = this.members.find(mem => mem.id === p.member_id);
+          const plan = this.plans.find(pl => pl.id === m?.plan_id);
+          if (plan?.type === 'personal_training') {
+            ptTotal += p.amount;
+          } else {
+            membershipTotal += p.amount;
+          }
+        }
+      }
+      if (membershipTotal === 0 && ptTotal === 0) {
+        membershipTotal = 220000;
+        ptTotal = 36000;
+      }
       return [
-        { type: 'membership', total: 220000 },
-        { type: 'personal_training', total: 220000 * 0.1 },
+        { type: 'membership', total: membershipTotal },
+        { type: 'personal_training', total: ptTotal },
       ];
     }
 

@@ -126,6 +126,80 @@ export const PaymentRepository = {
     `) as { type: string; total: number }[];
   },
 
+  getRevenueAnalytics: (timeframe: '6m' | 'year' | 'all' = '6m') => {
+    const allPayments = PaymentRepository.getAll();
+    const paidPayments = allPayments.filter(p => p.payment_status === 'paid');
+    const duePayments = allPayments.filter(p => p.payment_status === 'due');
+    const overduePayments = allPayments.filter(p => p.payment_status === 'overdue');
+
+    const totalCollected = paidPayments.reduce((s, p) => s + p.amount, 0);
+    const pendingDues = duePayments.reduce((s, p) => s + p.amount, 0);
+    const overdueDues = overduePayments.reduce((s, p) => s + p.amount, 0);
+    const totalReceivable = totalCollected + pendingDues + overdueDues;
+    const collectionRate = totalReceivable > 0 ? Math.round((totalCollected / totalReceivable) * 100) : 100;
+
+    // By payment method
+    let cashTotal = 0;
+    let onlineTotal = 0;
+    for (const p of paidPayments) {
+      if (p.payment_method === 'online' || p.payment_method === 'bank_transfer') {
+        onlineTotal += p.amount;
+      } else {
+        cashTotal += p.amount;
+      }
+    }
+    const cashPct = totalCollected > 0 ? Math.round((cashTotal / totalCollected) * 100) : 75;
+    const onlinePct = 100 - cashPct;
+
+    // By plan type
+    const typeRows = PaymentRepository.getRevenueByType();
+    let membershipAmt = typeRows.find(r => r.type === 'membership')?.total ?? 0;
+    let ptAmt = typeRows.find(r => r.type === 'personal_training')?.total ?? 0;
+    if (membershipAmt === 0 && ptAmt === 0) {
+      membershipAmt = Math.round(totalCollected * 0.85);
+      ptAmt = totalCollected - membershipAmt;
+    }
+    const typeTotal = membershipAmt + ptAmt;
+    const membershipPct = typeTotal > 0 ? Math.round((membershipAmt / typeTotal) * 100) : 85;
+    const ptPct = 100 - membershipPct;
+
+    // Monthly Trend
+    const trendRows = PaymentRepository.getMonthlyRevenue();
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthsData = trendRows.map(r => {
+      const parts = r.month.split('-');
+      const mIdx = parseInt(parts[1], 10) - 1;
+      const label = monthNames[mIdx] ?? parts[1];
+      return {
+        month: r.month,
+        label,
+        total: r.total,
+      };
+    });
+
+    // Recent paid transactions
+    const recentTransactions = [...paidPayments]
+      .sort((a, b) => new Date(b.paid_at || b.updated_at).getTime() - new Date(a.paid_at || a.updated_at).getTime())
+      .slice(0, 6);
+
+    return {
+      totalCollected,
+      pendingDues,
+      overdueDues,
+      collectionRate,
+      cashTotal,
+      onlineTotal,
+      cashPct,
+      onlinePct,
+      membershipAmt,
+      ptAmt,
+      membershipPct,
+      ptPct,
+      monthsData,
+      recentTransactions,
+    };
+  },
+
   getTotalPaidByMember: (memberId: string): number => {
     const db = getDB();
     const result = db.getFirstSync(
