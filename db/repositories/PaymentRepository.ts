@@ -1,4 +1,5 @@
 import { getDB } from '../database';
+import { MemberRepository } from './MemberRepository';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -40,9 +41,8 @@ export const PaymentRepository = {
   },
 
   getCurrentStatusPerMember: (): Payment[] => {
-    const db = getDB();
     const allPayments = PaymentRepository.getAll();
-    const members = db.getAllSync(`SELECT * FROM members WHERE status = 'active'`) as any[];
+    const members = MemberRepository.getAll();
 
     return members.map(m => {
       const memberPayments = allPayments.filter(p => p.member_id === m.id);
@@ -65,10 +65,10 @@ export const PaymentRepository = {
       return {
         id: `auto-${m.id}`,
         member_id: m.id,
-        amount: 3000,
+        amount: m.plan_price || 3000,
         paid_at: null,
         due_date: m.next_due_date,
-        payment_status: 'paid',
+        payment_status: (m.payment_status as any) || 'paid',
         payment_method: 'cash',
         notes: null,
         sync_status: 'synced',
@@ -212,6 +212,40 @@ export const PaymentRepository = {
   markPaid: (paymentId: string, method: string = 'cash'): void => {
     const db = getDB();
     const now = new Date().toISOString();
+
+    let memberId: string | null = null;
+
+    if (paymentId.startsWith('auto-')) {
+      memberId = paymentId.replace('auto-', '');
+      const member = db.getFirstSync(
+        `SELECT m.*, p.duration_days, p.price as plan_price FROM members m LEFT JOIN plans p ON m.plan_id = p.id WHERE m.id=?`,
+        [memberId]
+      ) as any;
+
+      if (member) {
+        const amount = member.plan_price || 3000;
+        PaymentRepository.insert({
+          member_id: member.id,
+          amount,
+          paid_at: now,
+          due_date: member.next_due_date || now.split('T')[0],
+          payment_status: 'paid',
+          payment_method: method,
+          notes: 'Settled via payment status',
+        });
+
+        const duration = member.duration_days || 30;
+        const nextDate = new Date();
+        nextDate.setDate(nextDate.getDate() + duration);
+        const nextDueDateStr = nextDate.toISOString().split('T')[0];
+
+        db.runSync(
+          `UPDATE members SET next_due_date=?, sync_status='pending', updated_at=? WHERE id=?`,
+          [nextDueDateStr, now, member.id]
+        );
+      }
+      return;
+    }
 
     // 1. Fetch current payment info
     const payment = db.getFirstSync(`SELECT * FROM payments WHERE id=?`, [paymentId]) as Payment | null;

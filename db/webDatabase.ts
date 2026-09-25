@@ -400,7 +400,7 @@ class WebDatabase {
     }
 
     // 2. members getAll & search
-    if (cleanSql.includes('FROM members m')) {
+    if (cleanSql.includes('FROM members')) {
       let filtered = this.members.filter(m => m.status === 'active');
       if (cleanSql.includes('m.full_name LIKE ?')) {
         const queryStr = (params[0] ?? '').replace(/%/g, '').toLowerCase();
@@ -427,6 +427,10 @@ class WebDatabase {
     // 3. payments getAll
     if (cleanSql.includes('FROM payments pay')) {
       let list = this.payments;
+      if (cleanSql.includes("m.status = 'active'")) {
+        const activeIds = new Set(this.members.filter(m => m.status === 'active').map(m => m.id));
+        list = list.filter(p => activeIds.has(p.member_id));
+      }
       if (cleanSql.includes('WHERE pay.payment_status = ?')) {
         const [status] = params;
         list = list.filter(p => p.payment_status === status);

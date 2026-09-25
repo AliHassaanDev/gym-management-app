@@ -185,16 +185,15 @@ export default function RevenueScreen() {
               {points.map((pt, idx) => {
                 const isSelected = selectedMonthIdx === idx;
                 return (
-                  <G key={pt.month} onPress={() => setSelectedMonthIdx(idx)}>
-                    <Circle
-                      cx={pt.x}
-                      cy={pt.y}
-                      r={isSelected ? 6.5 : 4}
-                      fill={isSelected ? '#0F172A' : '#F59E0B'}
-                      stroke="#FFFFFF"
-                      strokeWidth={2}
-                    />
-                  </G>
+                  <Circle
+                    key={pt.month}
+                    cx={pt.x}
+                    cy={pt.y}
+                    r={isSelected ? 6.5 : 4}
+                    fill={isSelected ? '#0F172A' : '#F59E0B'}
+                    stroke="#FFFFFF"
+                    strokeWidth={2}
+                  />
                 );
               })}
             </Svg>
