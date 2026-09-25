@@ -101,77 +101,75 @@ export default function AddMemberScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const [createdMember, setCreatedMember] = useState<{ id: string; name: string; number: string; status: string; amount: number } | null>(null);
+
   const handleSave = () => {
     if (!validate()) {
-      Alert.alert('Validation Error', 'Please check highlighted fields before saving.');
       return;
     }
 
     if (!selectedPlan) return;
 
     setLoading(true);
-    try {
-      const isoJoinDate = joiningDate.trim() || todayStr;
-      const nextDueDate = addDays(isoJoinDate, selectedPlan.duration_days);
-      const parsedAge = parseInt(age.trim(), 10);
+    setTimeout(() => {
+      try {
+        const isoJoinDate = joiningDate.trim() || todayStr;
+        // If paid now, their next payment is in duration_days. If pay later, their payment is due today!
+        const memberDueDate = paymentOption === 'paid'
+          ? addDays(isoJoinDate, selectedPlan.duration_days)
+          : isoJoinDate;
+        const parsedAge = parseInt(age.trim(), 10);
 
-      // 1. Insert real member
-      const member = MemberRepository.insert({
-        full_name: fullName.trim(),
-        phone: phone.trim(),
-        age: parsedAge,
-        gender: gender.toLowerCase(),
-        photo_uri: photoUri,
-        plan_id: selectedPlan.id,
-        joining_date: isoJoinDate,
-        next_due_date: nextDueDate,
-        status: 'active',
-      });
+        // 1. Insert member
+        const member = MemberRepository.insert({
+          full_name: fullName.trim(),
+          phone: phone.trim(),
+          age: parsedAge,
+          gender: gender.toLowerCase(),
+          photo_uri: photoUri,
+          plan_id: selectedPlan.id,
+          joining_date: isoJoinDate,
+          next_due_date: memberDueDate,
+          status: 'active',
+        });
 
-      // 2. Insert initial payment record matching selection
-      if (paymentOption === 'paid') {
-        PaymentRepository.insert({
-          member_id: member.id,
+        // 2. Insert payment record
+        if (paymentOption === 'paid') {
+          PaymentRepository.insert({
+            member_id: member.id,
+            amount: selectedPlan.price,
+            paid_at: new Date().toISOString(),
+            due_date: memberDueDate,
+            payment_status: 'paid',
+            payment_method: paymentMethod,
+            notes: 'Registration fee paid on joining',
+          });
+        } else {
+          PaymentRepository.insert({
+            member_id: member.id,
+            amount: selectedPlan.price,
+            paid_at: null,
+            due_date: isoJoinDate,
+            payment_status: 'due',
+            payment_method: paymentMethod,
+            notes: 'Pending initial registration fee',
+          });
+        }
+
+        // 3. Show in-frame success modal
+        setCreatedMember({
+          id: member.id,
+          name: member.full_name,
+          number: member.member_number,
+          status: paymentOption === 'paid' ? 'Paid' : 'Due',
           amount: selectedPlan.price,
-          paid_at: new Date().toISOString(),
-          due_date: nextDueDate,
-          payment_status: 'paid',
-          payment_method: paymentMethod,
-          notes: 'Initial registration fee',
         });
-      } else {
-        PaymentRepository.insert({
-          member_id: member.id,
-          amount: selectedPlan.price,
-          paid_at: null,
-          due_date: nextDueDate,
-          payment_status: 'due',
-          payment_method: paymentMethod,
-          notes: 'Pending initial payment',
-        });
+      } catch (e: any) {
+        Alert.alert('Error', e?.message ?? 'Failed to register member.');
+      } finally {
+        setLoading(false);
       }
-
-      // DO NOT add dummy attendance or dummy past payments!
-
-      Alert.alert(
-        'Member Added Successfully! 🎉',
-        `${fullName.trim()} has been registered with ID ${member.member_number}.`,
-        [
-          {
-            text: 'View Member',
-            onPress: () => router.replace(`/members/${member.id}`),
-          },
-          {
-            text: 'Done',
-            onPress: () => router.back(),
-          },
-        ]
-      );
-    } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Failed to register member.');
-    } finally {
-      setLoading(false);
-    }
+    }, 250);
   };
 
   return (
@@ -469,6 +467,73 @@ export default function AddMemberScreen() {
               {gender === g && <CheckCircleIcon size={18} color="#16A34A" />}
             </TouchableOpacity>
           ))}
+          <TouchableOpacity
+            style={styles.modalCloseBtn}
+            onPress={() => setGenderPickerOpen(false)}
+          >
+            <Text style={styles.modalCloseText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </AppModal>
+
+      {/* Member Registration Success In-Frame Modal */}
+      <AppModal
+        visible={Boolean(createdMember)}
+        onClose={() => router.replace('/(tabs)/members')}
+      >
+        <View style={styles.successCard}>
+          <View style={styles.successIconCircle}>
+            <CheckCircleIcon size={36} color="#16A34A" />
+          </View>
+          <Text style={styles.successModalTitle}>Member Added! 🎉</Text>
+          <Text style={styles.successModalSub}>
+            <Text style={{ fontWeight: '700', color: '#0F172A' }}>{createdMember?.name}</Text> has been registered with ID{' '}
+            <Text style={{ fontWeight: '700', color: '#0F172A' }}>{createdMember?.number}</Text>.
+          </Text>
+
+          {/* Payment Status Pill */}
+          <View style={styles.successStatusRow}>
+            <Text style={styles.successStatusLabel}>Initial Status:</Text>
+            <View
+              style={[
+                styles.successStatusBadge,
+                createdMember?.status === 'Paid'
+                  ? styles.successStatusBadgePaid
+                  : styles.successStatusBadgeDue,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.successStatusBadgeText,
+                  createdMember?.status === 'Paid'
+                    ? { color: '#16A34A' }
+                    : { color: '#D97706' },
+                ]}
+              >
+                {createdMember?.status === 'Paid'
+                  ? `Paid (PKR ${createdMember?.amount.toLocaleString()})`
+                  : `Payment Due (PKR ${createdMember?.amount.toLocaleString()})`}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.successActions}>
+            <TouchableOpacity
+              style={styles.viewProfileBtn}
+              onPress={() => router.replace(`/members/${createdMember?.id}`)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.viewProfileBtnText}>View Member Profile</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.doneBtn}
+              onPress={() => router.replace('/(tabs)/members')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.doneBtnText}>Back to Members List</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </AppModal>
     </SafeAreaView>
@@ -763,6 +828,101 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalCloseText: {
+    fontFamily: Fonts.medium,
+    fontSize: 14,
+    color: '#64748B',
+  },
+
+  successCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    alignItems: 'center',
+    ...Shadow.card,
+  },
+  successIconCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  successModalTitle: {
+    fontFamily: Fonts.bold,
+    fontSize: 20,
+    color: '#0F172A',
+    marginBottom: 8,
+  },
+  successModalSub: {
+    fontFamily: Fonts.regular,
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  successStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: Radius.md,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  successStatusLabel: {
+    fontFamily: Fonts.medium,
+    fontSize: 13,
+    color: '#64748B',
+  },
+  successStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+  },
+  successStatusBadgePaid: {
+    backgroundColor: '#DCFCE7',
+  },
+  successStatusBadgeDue: {
+    backgroundColor: '#FEF3C7',
+  },
+  successStatusBadgeText: {
+    fontFamily: Fonts.bold,
+    fontSize: 12,
+  },
+  successActions: {
+    width: '100%',
+    gap: 10,
+  },
+  viewProfileBtn: {
+    width: '100%',
+    backgroundColor: '#F59E0B',
+    borderRadius: Radius.md,
+    paddingVertical: 14,
+    alignItems: 'center',
+    ...Shadow.sm,
+  },
+  viewProfileBtnText: {
+    fontFamily: Fonts.bold,
+    fontSize: 14,
+    color: '#0F172A',
+  },
+  doneBtn: {
+    width: '100%',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: Radius.md,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  doneBtnText: {
     fontFamily: Fonts.medium,
     fontSize: 14,
     color: '#64748B',

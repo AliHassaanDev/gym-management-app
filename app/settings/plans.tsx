@@ -5,28 +5,30 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
-  Modal,
   TextInput,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Fonts, Radius, Shadow } from '../../constants/theme';
+import { Colors, Fonts, Radius, Shadow } from '../../constants/theme';
 import { PlanRepository, Plan } from '../../db/repositories/PlanRepository';
-import { ChevronLeftIcon, CalendarIcon } from '../../components/ui/Icons';
+import { ChevronLeftIcon, CalendarIcon, AlertCircleIcon, TrashIcon, CheckCircleIcon } from '../../components/ui/Icons';
 import { formatPKR } from '../../utils/helpers';
+import { AppModal } from '../../components/ui/AppModal';
 
 export default function PlansScreen() {
   const router = useRouter();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Plan | null>(null);
 
   // Form states
   const [name, setName] = useState('');
   const [type, setType] = useState<'membership' | 'personal_training'>('membership');
   const [durationDays, setDurationDays] = useState('30');
   const [price, setPrice] = useState('3000');
+  const [formError, setFormError] = useState<string | null>(null);
+  const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
 
   const loadPlans = useCallback(() => {
     const all = PlanRepository.getAll();
@@ -45,6 +47,7 @@ export default function PlansScreen() {
     setType('membership');
     setDurationDays('30');
     setPrice('3000');
+    setFormError(null);
     setModalVisible(true);
   };
 
@@ -54,23 +57,25 @@ export default function PlansScreen() {
     setType(plan.type);
     setDurationDays(String(plan.duration_days));
     setPrice(String(plan.price));
+    setFormError(null);
     setModalVisible(true);
   };
 
   const handleSavePlan = () => {
+    setFormError(null);
     if (!name.trim()) {
-      Alert.alert('Validation Error', 'Please enter a plan name.');
+      setFormError('Please enter a plan name.');
       return;
     }
     const days = parseInt(durationDays, 10);
     const p = parseFloat(price);
 
     if (isNaN(days) || days <= 0) {
-      Alert.alert('Validation Error', 'Please enter valid duration in days.');
+      setFormError('Please enter a valid duration in days (e.g. 30).');
       return;
     }
     if (isNaN(p) || p < 0) {
-      Alert.alert('Validation Error', 'Please enter a valid price in PKR.');
+      setFormError('Please enter a valid price in PKR.');
       return;
     }
 
@@ -81,6 +86,7 @@ export default function PlansScreen() {
         duration_days: days,
         price: p,
       });
+      setFeedbackMsg(`Updated "${name.trim()}" successfully`);
     } else {
       PlanRepository.insert({
         name: name.trim(),
@@ -89,24 +95,22 @@ export default function PlansScreen() {
         price: p,
         is_active: 1,
       });
+      setFeedbackMsg(`Created "${name.trim()}" successfully`);
     }
 
     setModalVisible(false);
     loadPlans();
+    setTimeout(() => setFeedbackMsg(null), 3500);
   };
 
-  const handleDelete = (plan: Plan) => {
-    Alert.alert('Delete Plan', `Are you sure you want to remove "${plan.name}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          PlanRepository.softDelete(plan.id);
-          loadPlans();
-        },
-      },
-    ]);
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    const planName = deleteTarget.name;
+    PlanRepository.softDelete(deleteTarget.id);
+    setDeleteTarget(null);
+    loadPlans();
+    setFeedbackMsg(`Deleted "${planName}" successfully`);
+    setTimeout(() => setFeedbackMsg(null), 3500);
   };
 
   const membershipPlans = plans.filter(p => p.type === 'membership');
@@ -121,9 +125,17 @@ export default function PlansScreen() {
         </TouchableOpacity>
         <Text style={styles.title}>Membership Plans</Text>
         <TouchableOpacity style={styles.addBtn} onPress={openAddModal} activeOpacity={0.8}>
-          <Text style={styles.addBtnText}>+ Add</Text>
+          <Text style={styles.addBtnText}>+ Add Plan</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Optional feedback banner */}
+      {feedbackMsg && (
+        <View style={styles.feedbackBanner}>
+          <CheckCircleIcon size={16} color="#16A34A" />
+          <Text style={styles.feedbackText}>{feedbackMsg}</Text>
+        </View>
+      )}
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Section 1: Membership Plans */}
@@ -148,13 +160,16 @@ export default function PlansScreen() {
                 <TouchableOpacity
                   style={styles.editBtn}
                   onPress={() => openEditModal(plan)}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.editBtnText}>Edit</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.deleteBtn}
-                  onPress={() => handleDelete(plan)}
+                  onPress={() => setDeleteTarget(plan)}
+                  activeOpacity={0.7}
                 >
+                  <TrashIcon size={14} color="#DC2626" />
                   <Text style={styles.deleteBtnText}>Delete</Text>
                 </TouchableOpacity>
               </View>
@@ -184,13 +199,16 @@ export default function PlansScreen() {
                 <TouchableOpacity
                   style={styles.editBtn}
                   onPress={() => openEditModal(plan)}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.editBtnText}>Edit</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.deleteBtn}
-                  onPress={() => handleDelete(plan)}
+                  onPress={() => setDeleteTarget(plan)}
+                  activeOpacity={0.7}
                 >
+                  <TrashIcon size={14} color="#DC2626" />
                   <Text style={styles.deleteBtnText}>Delete</Text>
                 </TouchableOpacity>
               </View>
@@ -199,98 +217,151 @@ export default function PlansScreen() {
         )}
       </ScrollView>
 
-      {/* Add / Edit Plan Modal */}
-      <Modal visible={modalVisible} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalTop}>
-              <Text style={styles.modalHeading}>
-                {editingPlan ? 'Edit Plan' : 'Create New Plan'}
+      {/* Add / Edit Plan In-Tree Modal (Phone Constrained) */}
+      <AppModal visible={modalVisible} onClose={() => setModalVisible(false)}>
+        <View style={styles.modalCard}>
+          <View style={styles.modalTop}>
+            <Text style={styles.modalHeading}>
+              {editingPlan ? 'Edit Membership Plan' : 'Create New Plan'}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setModalVisible(false)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.closeIcon}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {formError && (
+            <View style={styles.errorBanner}>
+              <AlertCircleIcon size={16} color="#DC2626" />
+              <Text style={styles.errorText}>{formError}</Text>
+            </View>
+          )}
+
+          {/* Type selector */}
+          <Text style={styles.inputLabel}>Plan Category</Text>
+          <View style={styles.typeSelector}>
+            <TouchableOpacity
+              style={[
+                styles.typeTab,
+                type === 'membership' && styles.activeTypeTab,
+              ]}
+              onPress={() => setType('membership')}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.typeTabText,
+                  type === 'membership' && styles.activeTypeTabText,
+                ]}
+              >
+                Membership
               </Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Text style={styles.closeIcon}>✕</Text>
-              </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
 
-            {/* Type selector */}
-            <Text style={styles.inputLabel}>Plan Category</Text>
-            <View style={styles.typeSelector}>
-              <TouchableOpacity
+            <TouchableOpacity
+              style={[
+                styles.typeTab,
+                type === 'personal_training' && styles.activeTypeTab,
+              ]}
+              onPress={() => setType('personal_training')}
+              activeOpacity={0.8}
+            >
+              <Text
                 style={[
-                  styles.typeTab,
-                  type === 'membership' && styles.activeTypeTab,
+                  styles.typeTabText,
+                  type === 'personal_training' && styles.activeTypeTabText,
                 ]}
-                onPress={() => setType('membership')}
               >
-                <Text
-                  style={[
-                    styles.typeTabText,
-                    type === 'membership' && styles.activeTypeTabText,
-                  ]}
-                >
-                  Membership
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.typeTab,
-                  type === 'personal_training' && styles.activeTypeTab,
-                ]}
-                onPress={() => setType('personal_training')}
-              >
-                <Text
-                  style={[
-                    styles.typeTabText,
-                    type === 'personal_training' && styles.activeTypeTabText,
-                  ]}
-                >
-                  Personal Training
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Name */}
-            <Text style={styles.inputLabel}>Plan Name</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. Monthly Standard, PT 1-on-1"
-              placeholderTextColor="#94A3B8"
-              value={name}
-              onChangeText={setName}
-            />
-
-            {/* Duration */}
-            <Text style={styles.inputLabel}>Validity Duration (Days)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. 30, 90, 365"
-              placeholderTextColor="#94A3B8"
-              keyboardType="numeric"
-              value={durationDays}
-              onChangeText={setDurationDays}
-            />
-
-            {/* Price */}
-            <Text style={styles.inputLabel}>Price in PKR</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. 3000"
-              placeholderTextColor="#94A3B8"
-              keyboardType="numeric"
-              value={price}
-              onChangeText={setPrice}
-            />
-
-            {/* Save Button */}
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSavePlan}>
-              <Text style={styles.saveBtnText}>
-                {editingPlan ? 'Update Plan' : 'Save Plan'}
+                Personal Training
               </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Name */}
+          <Text style={styles.inputLabel}>Plan Name</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Monthly Standard, PT 1-on-1"
+            placeholderTextColor="#94A3B8"
+            value={name}
+            onChangeText={t => {
+              setName(t);
+              if (formError) setFormError(null);
+            }}
+          />
+
+          {/* Duration */}
+          <Text style={styles.inputLabel}>Validity Duration (Days)</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. 30, 90, 365"
+            placeholderTextColor="#94A3B8"
+            keyboardType="numeric"
+            value={durationDays}
+            onChangeText={t => {
+              setDurationDays(t);
+              if (formError) setFormError(null);
+            }}
+          />
+
+          {/* Price */}
+          <Text style={styles.inputLabel}>Price (PKR)</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. 3000"
+            placeholderTextColor="#94A3B8"
+            keyboardType="numeric"
+            value={price}
+            onChangeText={t => {
+              setPrice(t);
+              if (formError) setFormError(null);
+            }}
+          />
+
+          {/* Save Button */}
+          <TouchableOpacity
+            style={styles.saveBtn}
+            onPress={handleSavePlan}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.saveBtnText}>
+              {editingPlan ? 'Update Plan' : 'Save Plan'}
+            </Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
+      </AppModal>
+
+      {/* Delete Confirmation In-Tree Modal (Phone Constrained) */}
+      <AppModal visible={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
+        <View style={styles.deleteModalCard}>
+          <View style={styles.deleteIconWrapper}>
+            <TrashIcon size={26} color="#DC2626" />
+          </View>
+          <Text style={styles.deleteTitle}>Delete Plan?</Text>
+          <Text style={styles.deleteDesc}>
+            Are you sure you want to remove <Text style={{ fontFamily: Fonts.bold }}>"{deleteTarget?.name}"</Text>? Existing members enrolled in this plan will remain intact, but it won't be available for new registrations.
+          </Text>
+
+          <View style={styles.deleteActions}>
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={() => setDeleteTarget(null)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.confirmDeleteBtn}
+              onPress={confirmDelete}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.confirmDeleteBtnText}>Yes, Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </AppModal>
     </SafeAreaView>
   );
 }
@@ -321,7 +392,7 @@ const styles = StyleSheet.create({
   title: { fontFamily: Fonts.bold, fontSize: 18, color: '#0F172A' },
   addBtn: {
     backgroundColor: '#F59E0B',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: Radius.full,
   },
@@ -329,6 +400,22 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bold,
     fontSize: 13,
     color: '#0F172A',
+  },
+
+  feedbackBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#DCFCE7',
+  },
+  feedbackText: {
+    fontFamily: Fonts.medium,
+    fontSize: 13,
+    color: '#166534',
   },
 
   content: {
@@ -365,7 +452,7 @@ const styles = StyleSheet.create({
     borderColor: '#F1F5F9',
     ...Shadow.sm,
   },
-  planInfo: { flex: 1 },
+  planInfo: { flex: 1, marginRight: 8 },
   planName: {
     fontFamily: Fonts.semiBold,
     fontSize: 15,
@@ -384,12 +471,12 @@ const styles = StyleSheet.create({
   planActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   editBtn: {
     backgroundColor: '#F8FAFC',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: Radius.full,
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -400,8 +487,11 @@ const styles = StyleSheet.create({
     color: '#0F172A',
   },
   deleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: Radius.full,
     backgroundColor: '#FEE2E2',
   },
@@ -411,16 +501,13 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.medium,
   },
 
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
   modalCard: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
+    paddingBottom: 32,
+    maxHeight: '90%',
   },
   modalTop: {
     flexDirection: 'row',
@@ -437,6 +524,23 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#64748B',
     padding: 4,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: Radius.md,
+    padding: 10,
+    marginBottom: 12,
+  },
+  errorText: {
+    fontFamily: Fonts.medium,
+    fontSize: 13,
+    color: '#DC2626',
+    flex: 1,
   },
   inputLabel: {
     fontFamily: Fonts.medium,
@@ -494,5 +598,66 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bold,
     fontSize: 15,
     color: '#0F172A',
+  },
+
+  deleteModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 36,
+    alignItems: 'center',
+  },
+  deleteIconWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  deleteTitle: {
+    fontFamily: Fonts.bold,
+    fontSize: 18,
+    color: '#0F172A',
+    marginBottom: 8,
+  },
+  deleteDesc: {
+    fontFamily: Fonts.regular,
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  deleteActions: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: '#F1F5F9',
+    borderRadius: Radius.md,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+  cancelBtnText: {
+    fontFamily: Fonts.semiBold,
+    fontSize: 14,
+    color: '#475569',
+  },
+  confirmDeleteBtn: {
+    flex: 1,
+    backgroundColor: '#DC2626',
+    borderRadius: Radius.md,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+  confirmDeleteBtnText: {
+    fontFamily: Fonts.bold,
+    fontSize: 14,
+    color: '#FFFFFF',
   },
 });

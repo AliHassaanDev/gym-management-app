@@ -32,11 +32,17 @@ export const MemberRepository = {
       SELECT m.*,
              p.name as plan_name, p.type as plan_type, p.price as plan_price, p.duration_days,
              COALESCE(
+               (
+                 SELECT payment_status FROM payments
+                 WHERE member_id = m.id AND payment_status IN ('overdue', 'due')
+                 ORDER BY CASE payment_status WHEN 'overdue' THEN 1 ELSE 2 END ASC
+                 LIMIT 1
+               ),
                CASE
                  WHEN date(m.next_due_date) < date('now') THEN 'overdue'
                  WHEN date(m.next_due_date) <= date('now', '+7 days') THEN 'due'
                  ELSE 'paid'
-               END, 'due'
+               END
              ) as payment_status
       FROM members m
       LEFT JOIN plans p ON m.plan_id = p.id
@@ -51,11 +57,17 @@ export const MemberRepository = {
       SELECT m.*,
              p.name as plan_name, p.type as plan_type, p.price as plan_price, p.duration_days,
              COALESCE(
+               (
+                 SELECT payment_status FROM payments
+                 WHERE member_id = m.id AND payment_status IN ('overdue', 'due')
+                 ORDER BY CASE payment_status WHEN 'overdue' THEN 1 ELSE 2 END ASC
+                 LIMIT 1
+               ),
                CASE
                  WHEN date(m.next_due_date) < date('now') THEN 'overdue'
                  WHEN date(m.next_due_date) <= date('now', '+7 days') THEN 'due'
                  ELSE 'paid'
-               END, 'due'
+               END
              ) as payment_status
       FROM members m
       LEFT JOIN plans p ON m.plan_id = p.id
@@ -108,11 +120,17 @@ export const MemberRepository = {
     return db.getAllSync(`
       SELECT m.*, p.name as plan_name, p.type as plan_type, p.price as plan_price, p.duration_days,
              COALESCE(
+               (
+                 SELECT payment_status FROM payments
+                 WHERE member_id = m.id AND payment_status IN ('overdue', 'due')
+                 ORDER BY CASE payment_status WHEN 'overdue' THEN 1 ELSE 2 END ASC
+                 LIMIT 1
+               ),
                CASE
                  WHEN date(m.next_due_date) < date('now') THEN 'overdue'
                  WHEN date(m.next_due_date) <= date('now', '+7 days') THEN 'due'
                  ELSE 'paid'
-               END, 'due'
+               END
              ) as payment_status
       FROM members m
       LEFT JOIN plans p ON m.plan_id = p.id

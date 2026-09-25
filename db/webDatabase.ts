@@ -136,21 +136,21 @@ class WebDatabase {
 
     // 3. plans update
     if (cleanSql.includes('UPDATE plans SET is_active=0')) {
-      const [, id] = params;
+      const id = params[params.length - 1];
       const target = this.plans.find(p => p.id === id);
       if (target) target.is_active = 0;
       return;
     }
-    if (cleanSql.includes('UPDATE plans SET name=')) {
-      const [name, type, duration_days, price, is_active, now, id] = params;
+    if (cleanSql.toUpperCase().includes('UPDATE PLANS')) {
+      const id = params[params.length - 1];
       const target = this.plans.find(p => p.id === id);
       if (target) {
+        const [name, type, duration_days, price] = params;
         target.name = name;
         target.type = type;
         target.duration_days = Number(duration_days);
         target.price = Number(price);
-        target.is_active = Number(is_active ?? 1);
-        target.updated_at = now;
+        target.updated_at = new Date().toISOString();
       }
       return;
     }
@@ -178,9 +178,18 @@ class WebDatabase {
 
     // 5. members update
     if (cleanSql.includes("UPDATE members SET status='inactive'")) {
-      const [, id] = params;
+      const id = params[params.length - 1];
       const target = this.members.find(m => m.id === id);
       if (target) target.status = 'inactive';
+      return;
+    }
+    if (cleanSql.includes('UPDATE members SET next_due_date=')) {
+      const [next_due_date, now, id] = params;
+      const target = this.members.find(m => m.id === id);
+      if (target) {
+        target.next_due_date = next_due_date;
+        target.updated_at = now;
+      }
       return;
     }
     if (cleanSql.includes('UPDATE members SET full_name=')) {
@@ -302,9 +311,8 @@ class WebDatabase {
         return { total };
       }
       // current month revenue
-      const currentMonth = new Date().toISOString().slice(0, 7);
       const total = this.payments
-        .filter(p => p.payment_status === 'paid' && p.paid_at && p.paid_at.startsWith(currentMonth))
+        .filter(p => p.payment_status === 'paid')
         .reduce((sum, p) => sum + p.amount, 0);
       return { total: total > 0 ? total : 256000 };
     }
@@ -462,6 +470,14 @@ class WebDatabase {
   }
 
   private getMemberPaymentStatus(m: MemberRow): 'paid' | 'due' | 'overdue' {
+    const memberPayments = this.payments.filter(p => p.member_id === m.id);
+    if (memberPayments.length > 0) {
+      const overdue = memberPayments.find(p => p.payment_status === 'overdue');
+      if (overdue) return 'overdue';
+      const due = memberPayments.find(p => p.payment_status === 'due');
+      if (due) return 'due';
+      return 'paid';
+    }
     const today = new Date().toISOString().split('T')[0];
     if (m.next_due_date < today) return 'overdue';
     const dueIn7Days = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];

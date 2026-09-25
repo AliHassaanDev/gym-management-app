@@ -31,27 +31,20 @@ import { AppModal } from '../../components/ui/AppModal';
 export default function SettingsScreen() {
   const router = useRouter();
   const [gymModalVisible, setGymModalVisible] = useState(false);
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [helpModalVisible, setHelpModalVisible] = useState(false);
   const [gymName, setGymName] = useState('GYM PAGLU');
   const [gymPhone, setGymPhone] = useState('+92 300 1234567');
   const [gymAddress, setGymAddress] = useState('Main Boulevard, Gulberg III, Lahore');
 
-  const handleLogout = () => {
-    Alert.alert('Log Out', 'Are you sure you want to log out of GYM PAGLU?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Log Out',
-        style: 'destructive',
-        onPress: () => {
-          AuthService.logout();
-          router.replace('/welcome');
-        },
-      },
-    ]);
+  const confirmLogout = () => {
+    AuthService.logout();
+    setLogoutModalVisible(false);
+    router.replace('/welcome');
   };
 
   const handleSaveGym = () => {
     setGymModalVisible(false);
-    Alert.alert('Settings Saved', 'Gym details updated successfully.');
   };
 
   return (
@@ -142,7 +135,7 @@ export default function SettingsScreen() {
           {/* Help & Support */}
           <TouchableOpacity
             style={[styles.menuItem, { borderBottomWidth: 0 }]}
-            onPress={() => Alert.alert('Help & Support', 'GYM PAGLU Support:\nEmail: support@gympaglu.pk\nHelpline: +92 300 0000000\nDocs: https://gympaglu.pk/docs')}
+            onPress={() => setHelpModalVisible(true)}
             activeOpacity={0.7}
           >
             <View style={styles.menuLeft}>
@@ -154,66 +147,135 @@ export default function SettingsScreen() {
         </View>
 
         {/* Log Out Button matching Screen 10 */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          onPress={() => setLogoutModalVisible(true)}
+          activeOpacity={0.7}
+        >
           <LogOutIcon size={20} color="#DC2626" />
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Logout Confirmation In-Frame Modal */}
+      <AppModal
+        visible={logoutModalVisible}
+        onClose={() => setLogoutModalVisible(false)}
+      >
+        <View style={styles.modalCard}>
+          <View style={styles.logoutIconCircle}>
+            <LogOutIcon size={28} color="#DC2626" />
+          </View>
+          <Text style={styles.logoutModalTitle}>Log Out of GYM PAGLU?</Text>
+          <Text style={styles.logoutModalSub}>
+            Are you sure you want to end your current session? You will need your owner password to sign back in.
+          </Text>
+
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={() => setLogoutModalVisible(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.confirmLogoutBtn}
+              onPress={confirmLogout}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.confirmLogoutBtnText}>Yes, Log Out</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </AppModal>
 
       {/* Gym Details In-Frame Modal */}
       <AppModal
         visible={gymModalVisible}
         onClose={() => setGymModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Gym Details</Text>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>Gym Details</Text>
 
-            <Text style={styles.inputLabel}>Gym Name</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={gymName}
-              onChangeText={setGymName}
-              placeholder="GYM PAGLU"
-              placeholderTextColor="#94A3B8"
-            />
+          <Text style={styles.inputLabel}>Gym Name</Text>
+          <TextInput
+            style={styles.modalInput}
+            value={gymName}
+            onChangeText={setGymName}
+            placeholder="GYM PAGLU"
+            placeholderTextColor="#94A3B8"
+          />
 
-            <Text style={styles.inputLabel}>Helpline / Phone</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={gymPhone}
-              onChangeText={setGymPhone}
-              placeholder="+92 300 1234567"
-              placeholderTextColor="#94A3B8"
-              keyboardType="phone-pad"
-            />
+          <Text style={styles.inputLabel}>Helpline / Phone</Text>
+          <TextInput
+            style={styles.modalInput}
+            value={gymPhone}
+            onChangeText={setGymPhone}
+            placeholder="+92 300 1234567"
+            placeholderTextColor="#94A3B8"
+            keyboardType="phone-pad"
+          />
 
-            <Text style={styles.inputLabel}>Address</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={gymAddress}
-              onChangeText={setGymAddress}
-              placeholder="Gym Address"
-              placeholderTextColor="#94A3B8"
-            />
+          <Text style={styles.inputLabel}>Address</Text>
+          <TextInput
+            style={styles.modalInput}
+            value={gymAddress}
+            onChangeText={setGymAddress}
+            placeholder="Gym Address"
+            placeholderTextColor="#94A3B8"
+          />
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => setGymModalVisible(false)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.cancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.saveBtn}
-                onPress={handleSaveGym}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.saveBtnText}>Save</Text>
-              </TouchableOpacity>
-            </View>
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={() => setGymModalVisible(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.saveBtn}
+              onPress={handleSaveGym}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.saveBtnText}>Save</Text>
+            </TouchableOpacity>
           </View>
+        </View>
+      </AppModal>
+
+      {/* Help & Support In-Frame Modal */}
+      <AppModal
+        visible={helpModalVisible}
+        onClose={() => setHelpModalVisible(false)}
+      >
+        <View style={styles.modalCard}>
+          <View style={[styles.logoutIconCircle, { backgroundColor: '#EFF6FF' }]}>
+            <HelpCircleIcon size={28} color="#2563EB" />
+          </View>
+          <Text style={styles.logoutModalTitle}>Help & Support</Text>
+          <Text style={styles.logoutModalSub}>
+            Need assistance with GYM PAGLU setup, biometric machines, or billing?
+          </Text>
+          <View style={{ backgroundColor: '#F8FAFC', borderRadius: Radius.md, padding: 14, marginVertical: 14, width: '100%', gap: 8 }}>
+            <Text style={{ fontFamily: Fonts.medium, fontSize: 13, color: '#334155' }}>
+              📧 Email: <Text style={{ fontFamily: Fonts.bold, color: '#0F172A' }}>support@gympaglu.pk</Text>
+            </Text>
+            <Text style={{ fontFamily: Fonts.medium, fontSize: 13, color: '#334155' }}>
+              📞 Helpline: <Text style={{ fontFamily: Fonts.bold, color: '#0F172A' }}>+92 300 1234567</Text>
+            </Text>
+            <Text style={{ fontFamily: Fonts.medium, fontSize: 13, color: '#334155' }}>
+              🕒 Active Support: Mon - Sat (9:00 AM - 10:00 PM)
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.saveBtn, { width: '100%', marginTop: 6 }]}
+            onPress={() => setHelpModalVisible(false)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.saveBtnText}>Got it</Text>
+          </TouchableOpacity>
         </View>
       </AppModal>
     </SafeAreaView>
@@ -373,6 +435,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveBtnText: {
+    fontFamily: Fonts.bold,
+    fontSize: 14,
+    color: '#FFFFFF',
+  },
+
+  logoutIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  logoutModalTitle: {
+    fontFamily: Fonts.bold,
+    fontSize: 18,
+    color: '#0F172A',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  logoutModalSub: {
+    fontFamily: Fonts.regular,
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 12,
+    marginBottom: 20,
+  },
+  confirmLogoutBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: Radius.lg,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+  },
+  confirmLogoutBtnText: {
     fontFamily: Fonts.bold,
     fontSize: 14,
     color: '#FFFFFF',

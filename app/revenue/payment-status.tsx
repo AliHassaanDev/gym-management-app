@@ -13,10 +13,11 @@ import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts, Radius, Shadow } from '../../constants/theme';
 import { PaymentRepository, Payment } from '../../db/repositories/PaymentRepository';
-import { ChevronLeftIcon, ChevronRightIcon, WalletIcon } from '../../components/ui/Icons';
+import { ChevronLeftIcon, ChevronRightIcon, WalletIcon, CheckCircleIcon } from '../../components/ui/Icons';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { getMemberAvatar } from '../../constants/mockAvatars';
 import { formatPKR } from '../../utils/helpers';
+import { AppModal } from '../../components/ui/AppModal';
 
 type StatusTab = 'paid' | 'due' | 'overdue';
 
@@ -64,30 +65,26 @@ export default function PaymentStatusScreen() {
     setRefreshing(false);
   }, [loadData]);
 
+  const [selectedPaymentForPay, setSelectedPaymentForPay] = useState<Payment | null>(null);
+  const [payMethod, setPayMethod] = useState<'cash' | 'online'>('cash');
+  const [successToast, setSuccessToast] = useState<string | null>(null);
+
   const handleMarkPaid = (payment: Payment) => {
-    Alert.alert(
-      'Receive Payment',
-      `Mark ${formatPKR(payment.amount)} from ${payment.member_name ?? 'Member'} as paid?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Cash',
-          onPress: () => {
-            PaymentRepository.markPaid(payment.id, 'cash');
-            loadData();
-            Alert.alert('Payment Received ✓', `${formatPKR(payment.amount)} marked as paid.`);
-          },
-        },
-        {
-          text: 'Online / Bank',
-          onPress: () => {
-            PaymentRepository.markPaid(payment.id, 'online');
-            loadData();
-            Alert.alert('Payment Received ✓', `${formatPKR(payment.amount)} marked as paid.`);
-          },
-        },
-      ]
-    );
+    setSelectedPaymentForPay(payment);
+    setPayMethod('cash');
+  };
+
+  const confirmReceivePayment = () => {
+    if (!selectedPaymentForPay) return;
+    PaymentRepository.markPaid(selectedPaymentForPay.id, payMethod);
+    const paidMemberName = selectedPaymentForPay.member_name ?? 'Member';
+    const paidAmt = selectedPaymentForPay.amount;
+    setSelectedPaymentForPay(null);
+    loadData();
+    setSuccessToast(`Received PKR ${paidAmt.toLocaleString()} from ${paidMemberName}! ✓`);
+    setTimeout(() => {
+      setSuccessToast(null);
+    }, 4000);
   };
 
   const formatDueNotice = (item: Payment) => {
@@ -207,6 +204,83 @@ export default function PaymentStatusScreen() {
           </View>
         }
       />
+
+      {/* Toast Notification Banner */}
+      {successToast && (
+        <View style={styles.toastWrap}>
+          <CheckCircleIcon size={16} color="#FFFFFF" />
+          <Text style={styles.toastText}>{successToast}</Text>
+        </View>
+      )}
+
+      {/* Payment Settlement In-Frame Modal */}
+      <AppModal
+        visible={Boolean(selectedPaymentForPay)}
+        onClose={() => setSelectedPaymentForPay(null)}
+      >
+        <View style={styles.modalCard}>
+          <View style={styles.modalIconCircle}>
+            <WalletIcon size={28} color="#16A34A" />
+          </View>
+          <Text style={styles.modalHeading}>Receive Payment</Text>
+          <Text style={styles.modalSub}>
+            Record payment for{' '}
+            <Text style={{ fontWeight: '700', color: '#0F172A' }}>
+              {selectedPaymentForPay?.member_name ?? 'Member'}
+            </Text>{' '}
+            ({selectedPaymentForPay?.member_number ?? '#G000'}).
+          </Text>
+
+          <View style={styles.amountBox}>
+            <Text style={styles.amountBoxLabel}>Amount Due</Text>
+            <Text style={styles.amountBoxVal}>
+              PKR {selectedPaymentForPay?.amount.toLocaleString()}
+            </Text>
+          </View>
+
+          <Text style={styles.methodHeader}>Select Payment Method</Text>
+          <View style={styles.methodPillRow}>
+            {(['cash', 'online'] as const).map((m) => (
+              <TouchableOpacity
+                key={m}
+                style={[
+                  styles.methodBtn,
+                  payMethod === m && styles.methodBtnActive,
+                ]}
+                onPress={() => setPayMethod(m)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.methodBtnText,
+                    payMethod === m && styles.methodBtnTextActive,
+                  ]}
+                >
+                  {m === 'cash' ? '💵 Cash Payment' : '💳 Online / Bank'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={() => setSelectedPaymentForPay(null)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.confirmPayBtn}
+              onPress={confirmReceivePayment}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.confirmPayBtnText}>Confirm Received</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </AppModal>
     </SafeAreaView>
   );
 }
@@ -349,5 +423,145 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#64748B',
     marginTop: 4,
+  },
+
+  toastWrap: {
+    position: 'absolute',
+    top: 60,
+    alignSelf: 'center',
+    backgroundColor: '#0F172A',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: Radius.full,
+    zIndex: 99999,
+    ...Shadow.card,
+  },
+  toastText: {
+    fontFamily: Fonts.medium,
+    fontSize: 13,
+    color: '#FFFFFF',
+  },
+
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    alignItems: 'center',
+    ...Shadow.card,
+  },
+  modalIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  modalHeading: {
+    fontFamily: Fonts.bold,
+    fontSize: 20,
+    color: '#0F172A',
+    marginBottom: 6,
+  },
+  modalSub: {
+    fontFamily: Fonts.regular,
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  amountBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 16,
+  },
+  amountBoxLabel: {
+    fontFamily: Fonts.regular,
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 2,
+  },
+  amountBoxVal: {
+    fontFamily: Fonts.bold,
+    fontSize: 22,
+    color: '#0F172A',
+  },
+  methodHeader: {
+    fontFamily: Fonts.semiBold,
+    fontSize: 13,
+    color: '#334155',
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  methodPillRow: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+    marginBottom: 20,
+  },
+  methodBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+  },
+  methodBtnActive: {
+    borderColor: '#16A34A',
+    backgroundColor: '#F0FDF4',
+  },
+  methodBtnText: {
+    fontFamily: Fonts.medium,
+    fontSize: 12,
+    color: '#64748B',
+  },
+  methodBtnTextActive: {
+    fontFamily: Fonts.bold,
+    color: '#16A34A',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  cancelBtnText: {
+    fontFamily: Fonts.medium,
+    fontSize: 14,
+    color: '#64748B',
+  },
+  confirmPayBtn: {
+    flex: 1.5,
+    paddingVertical: 14,
+    borderRadius: Radius.md,
+    backgroundColor: '#16A34A',
+    alignItems: 'center',
+    ...Shadow.sm,
+  },
+  confirmPayBtnText: {
+    fontFamily: Fonts.bold,
+    fontSize: 14,
+    color: '#FFFFFF',
   },
 });
